@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Palimpseste</title>
+    <style>
+      /* Fond encre autour du canvas ; le canvas lui-même est géré par src/main.ts. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1f1b16;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      canvas {
+        /* Pixel-perfect : le navigateur ne doit jamais lisser l'upscale. */
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
