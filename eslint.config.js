@@ -17,9 +17,17 @@ export default tseslint.config(
     },
   },
   {
-    // Les fichiers de config à la racine ne sont pas dans le project TS strict.
-    files: ['*.js', '*.ts'],
+    // Les fichiers de config à la racine et les scripts d'outillage ne sont
+    // pas dans le project TS strict.
+    files: ['*.js', '*.ts', 'tools/**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    // Scripts d'outillage : environnement Node.
+    files: ['tools/**/*.mjs'],
+    languageOptions: {
+      globals: { URL: 'readonly', console: 'readonly', process: 'readonly' },
+    },
   },
   prettier,
 );

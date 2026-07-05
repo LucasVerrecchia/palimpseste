@@ -1,0 +1,11 @@
+{
+  "abilities": [
+    {
+      "id": "ecrire",
+      "word": "ÉCRIRE",
+      "inkCost": 25,
+      "effect": "materialize_platform",
+      "description": "Dépense de l'encre pour rendre réel ce qui n'est pas écrit."
+    }
+  ]
+}

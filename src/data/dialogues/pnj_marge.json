@@ -1,0 +1,41 @@
+{
+  "id": "pnj_marge",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "speaker": "PNJ de la Marge",
+      "text": "[TODO narration — texte placeholder] Tu es réveillé, petit mot ? La page s'effrite, par ici.",
+      "next": "conseil"
+    },
+    "conseil": {
+      "speaker": "PNJ de la Marge",
+      "text": "[TODO narration] Plus loin traîne un mot perdu : ÉCRIRE. Ramasse-le, puis appuie sur X près des formes pâles pour les rendre réelles.",
+      "next": "question"
+    },
+    "question": {
+      "speaker": "PNJ de la Marge",
+      "text": "[TODO narration] Et toi, que feras-tu de ce brouillon de monde ?",
+      "choices": [
+        {
+          "text": "[TODO] L'achever.",
+          "next": "fin_achever",
+          "effects": [{ "type": "set_flag", "flag": "intention_achever", "value": true }]
+        },
+        {
+          "text": "[TODO] Je ne sais pas encore.",
+          "next": "fin_doute"
+        }
+      ]
+    },
+    "fin_achever": {
+      "speaker": "PNJ de la Marge",
+      "text": "[TODO narration] Vaste programme, pour un si petit mot. Va.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
+    },
+    "fin_doute": {
+      "speaker": "PNJ de la Marge",
+      "text": "[TODO narration] Les brouillons sont faits pour hésiter. Va, et reviens me lire.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
+    }
+  }
+}

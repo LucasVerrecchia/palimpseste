@@ -13,3 +13,4 @@
 
 ## Suivi
 - **2026-07-05 (Phase 0)** : R2 anticipé (la signature de `physics.ts` sera swept dès le départ) ; R5 adressé (logs en place) ; R6 adressé (ACKNOWLEDGEMENTS créé).
+- **2026-07-05 (Phase 1)** : R2 clos — collision swept implémentée et testée (tests anti-tunneling horizontaux/verticaux à vitesse 100 000 px/s). R4 adressé — save versionnée avec fallback testé (version inconnue → nouvelle partie).

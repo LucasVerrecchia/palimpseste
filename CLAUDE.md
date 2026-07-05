@@ -26,6 +26,14 @@ danger #C1362B, non-écrit #CFE3E8.
 - Logguer les sessions dans /prompts_logs/. Licences dans ACKNOWLEDGEMENTS.md.
 - Jamais de données perso sensibles.
 
+## Narration
+- Le contenu narratif (dialogues, noms de PNJ, textes) se décide AVEC Lucas.
+  Livrer la machinerie technique + placeholders marqués [TODO narration],
+  jamais de texte final sans discussion.
+
 ## État d'avancement
-- Phase 0 (fondations) : démarrée le 2026-07-05.
-- Phases 1-4 : à venir (attendre validation humaine entre chaque phase).
+- Phase 0 (fondations) : terminée le 2026-07-05.
+- Phase 1 (prototype vertical) : code terminé le 2026-07-05 — en attente de
+  playtest/validation de Lucas. Salle marge_01, physique swept, ÉCRIRE,
+  1 PNJ (dialogue placeholder), save localStorage, 47 tests.
+- Phases 2-4 : à venir (attendre validation humaine entre chaque phase).

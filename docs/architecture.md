@@ -50,6 +50,25 @@ Collisions, encre, `resolveEnding`, machine à états des dialogues : fonctions
 pures sans accès DOM/Canvas, testées dans `tests/` en environnement `node`.
 Premier exemple en place : `engine/scaling.ts` (`computeIntegerScale`).
 
+### D6 — Pas d'ECS en Phase 1
+La spec prévoit un ECS « léger et pragmatique ». En Phase 1 il n'y a que le
+joueur, un PNJ et des objets de salle : des types dédiés suffisent et restent
+plus lisibles. L'ECS sera introduit en Phase 2 quand la variété d'ennemis le
+justifiera — l'introduire avant serait de la sur-ingénierie.
+
+### D7 — Salle marge_01 générée par script (stopgap Phase 1)
+`tools/gen_room_marge01.mjs` génère `src/data/rooms/marge_01.json` au format
+export Tiled (le fichier s'ouvre dans Tiled). À partir de la Phase 2, les
+salles seront éditées directement dans Tiled ; le parseur maison
+(`engine/tilemap.ts`) est déjà conforme au format d'export officiel
+(y compris le champ `class` de Tiled ≥ 1.9).
+
+### D8 — Contenu narratif = placeholder co-écrit plus tard
+Décision de process : la machinerie de dialogue est finale et testée, mais les
+textes dans `data/dialogues/*.json` sont des placeholders marqués
+`[TODO narration]`. L'écriture narrative se fait en binôme humain/IA dans une
+passe dédiée (Phase 3), pas au fil du code.
+
 ## Diagramme de dépendances (cible)
 
 ```
@@ -58,8 +77,18 @@ main.ts ──▶ game/ ──▶ engine/
               └──▶ data/*.json (chargés, jamais codés en dur)
 ```
 
-## À venir (Phase 1)
-- `engine/loop.ts` : accumulateur à pas fixe 60 Hz, update/render découplés.
-- `engine/physics.ts` : AABB + collision swept (anti-tunneling dès le départ).
-- `engine/events.ts` : bus d'événements typé.
-- `engine/input.ts` : mapping touches → actions abstraites.
+## Réalisé en Phase 1
+- `engine/` : `loop.ts` (pas fixe 60 Hz), `physics.ts` (AABB swept, testée
+  anti-tunneling), `events.ts` (bus typé), `input.ts` (actions abstraites,
+  remappables, basées sur `KeyboardEvent.code` → AZERTY ok), `tilemap.ts`
+  (parseur Tiled), `save.ts` (localStorage versionné), `camera.ts`, `renderer.ts`.
+- `game/` : contrôleur joueur (saut variable), encre (pure, règle du délavage),
+  pouvoir ÉCRIRE data-driven, machine à états de dialogue (pure, validée),
+  salle avec plateformes non-écrites, HUD, boîte de dialogue, save/restore.
+- 47 tests Vitest sur la logique pure.
+
+## À venir (Phase 2)
+- ECS léger (voir D6) + ennemis (Coquilles, Ratures) + boss Coquille majuscule.
+- `world/palimpsest.ts` : couches en filigrane (effacement → révélation).
+- Transitions de salles multiples ; salles éditées dans Tiled.
+- Pouvoirs BRÈCHE, HÂTE, ANCRE, ALES + gating.
