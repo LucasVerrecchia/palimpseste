@@ -9,7 +9,9 @@ Voir Palimpseste_SPEC.md pour la spec complète.
 - Séparation engine/ (générique) vs game/ (Palimpseste). engine n'importe jamais game.
 - Data-driven : niveaux (Tiled JSON), dialogues, pouvoirs, flags = fichiers /src/data.
 - Boucle à pas de temps fixe. Logique métier en fonctions pures + tests Vitest.
-- Résolution interne 480x270, tuiles 16x16, pixel-perfect (pas de lissage).
+- Rendu VECTORIEL haute résolution « manuscrit moderne » (décision D9 du
+  2026-07-06 — plus de pixel art). Vue en unités monde 480x270, tuiles 16x16
+  pour la physique/level design. Formes lisses, ombres douces, particules.
 
 ## Palette
 Parchemin #EDE4D3 / #D8CBB0, encre #1F1B16, sépia #5B4A38,

@@ -28,3 +28,13 @@
   - Tests : 47 tests Vitest (physique swept dont anti-tunneling, encre/délavage, dialogue, save/migration, tilemap + intégrité de la salle réelle)
 - **Modifications manuelles** : aucune pendant la session ; consigne humaine intégrée (narration = placeholders à co-écrire).
 - **Décision d'intégration** : intégré après lint + 47 tests + build verts + smoke test HTTP du build servi (`vite preview` → 200). Validation jouable par l'humain attendue avant Phase 2.
+
+## Session 3 — 2026-07-06 — Setup GitHub + pivot direction artistique (D9)
+- **Contexte** : retour de playtest humain sur la Phase 1 : mouvements OK, mais rendu jugé « très 8-bit débutant » ; demande d'un style plus moderne, ouverture à l'usage de librairies.
+- **Prompt (résumé)** : « les mouvements sont pas trop mal MAIS ça fait très 8-bit débutant […] un truc plus moderne et moins pixel art, n'hésite pas à prendre des librairies ». Question posée en retour (choix structuré) : Canvas vectoriel maison / Pixi.js / Phaser + conservation de la palette. **Décision humaine** : Canvas vectoriel maison + palette manuscrit conservée.
+- **Modèle & outil** : Claude Fable 5 (claude-fable-5) via Claude Code.
+- **Output** :
+  - Setup : installation GitHub CLI (winget), auth device-flow par l'humain, création du dépôt privé `LucasVerrecchia/palimpseste` + push.
+  - Pivot DA (D9, docs/architecture.md) : `engine/renderer.ts` réécrit (canvas pleine fenêtre à résolution native + letterbox, vue 480×270 en unités monde), caméra à lissage exponentiel, suppression du module de scaling entier, `mergeSolidTiles` (fusion des tuiles en dalles, pure + testée), rendu modernisé de game.ts (texture papier procédurale, dalles arrondies ombrées, squash & stretch, particules d'encre, lueurs), HUD/toasts/boîte de dialogue en pilules arrondies. Spec §5 annotée, CLAUDE.md/README mis à jour.
+- **Modifications manuelles** : aucune ; décisions prises par l'humain via questions structurées.
+- **Décision d'intégration** : intégré après 49 tests + lint + build verts. Validation visuelle par l'humain attendue.

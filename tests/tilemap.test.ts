@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gidAt, parseTiledMap } from '../src/engine/tilemap';
+import { gidAt, mergeSolidTiles, parseTiledMap } from '../src/engine/tilemap';
 import marge01 from '../src/data/rooms/marge_01.json';
 
 function minimalMap(): Record<string, unknown> {
@@ -73,6 +73,62 @@ describe('parseTiledMap', () => {
     expect(gidAt(map, 0, 5)).toBe(0);
     expect(gidAt(map, 0, 0)).toBe(1);
     expect(gidAt(map, 1, 0)).toBe(0);
+  });
+});
+
+describe('mergeSolidTiles — fusion des tuiles en dalles', () => {
+  it('fusionne un bloc plein en un seul rectangle', () => {
+    const rects = mergeSolidTiles(3, 2, () => true);
+    expect(rects).toEqual([{ x: 0, y: 0, w: 3, h: 2 }]);
+  });
+
+  it('empile les séquences identiques et sépare les différentes (forme en L)', () => {
+    // ##.
+    // ##.
+    // ###
+    const grid = [
+      [1, 1, 0],
+      [1, 1, 0],
+      [1, 1, 1],
+    ];
+    const rects = mergeSolidTiles(3, 3, (x, y) => grid[y]?.[x] === 1);
+    expect(rects).toEqual([
+      { x: 0, y: 0, w: 2, h: 2 },
+      { x: 0, y: 2, w: 3, h: 1 },
+    ]);
+  });
+
+  it('sépare les séquences non contiguës d\'une même ligne', () => {
+    // #.#
+    const rects = mergeSolidTiles(3, 1, (x) => x !== 1);
+    expect(rects).toEqual([
+      { x: 0, y: 0, w: 1, h: 1 },
+      { x: 2, y: 0, w: 1, h: 1 },
+    ]);
+  });
+
+  it('retourne vide pour une grille vide', () => {
+    expect(mergeSolidTiles(4, 4, () => false)).toEqual([]);
+  });
+
+  it('couvre exactement les tuiles solides de la salle réelle (ni trou ni excès)', () => {
+    const map = parseTiledMap(marge01);
+    const rects = mergeSolidTiles(map.widthTiles, map.heightTiles, (x, y) => gidAt(map, x, y) > 0);
+    const covered = new Set<string>();
+    for (const r of rects) {
+      for (let y = r.y; y < r.y + r.h; y++) {
+        for (let x = r.x; x < r.x + r.w; x++) {
+          const key = `${String(x)},${String(y)}`;
+          expect(covered.has(key), `chevauchement en ${key}`).toBe(false);
+          covered.add(key);
+        }
+      }
+    }
+    for (let y = 0; y < map.heightTiles; y++) {
+      for (let x = 0; x < map.widthTiles; x++) {
+        expect(covered.has(`${String(x)},${String(y)}`)).toBe(gidAt(map, x, y) > 0);
+      }
+    }
   });
 });
 

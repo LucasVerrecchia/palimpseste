@@ -171,6 +171,14 @@ Fusion de la structure imposée par le sujet et de notre layout `src/` :
 
 ## 5. Direction artistique & assets
 
+> **MISE À JOUR 2026-07-06 (décision D9, voir docs/architecture.md)** : le
+> style pixel art est abandonné au profit d'un rendu **vectoriel haute
+> résolution dessiné au code** (« manuscrit moderne » : formes lisses, ombres
+> douces, particules d'encre). La palette ci-dessous reste la référence.
+> Les mentions « pixel art / 480×270 upscalé / 16×16 sprites » de cette
+> section décrivent l'ancienne direction ; la grille 16 px reste valable
+> comme unité de level design (physique/tilemap).
+
 **Style : pixel art, palette « manuscrit ».** La contrainte de palette est un atout : elle est thématique, économe, et rend les assets générés par IA faciles à unifier (on recolore tout dans la palette).
 
 - **Résolution interne** : 480×270, scaling entier vers l'écran (×2, ×3, ×4). 16:9.

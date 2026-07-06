@@ -4,7 +4,7 @@
 import { Input } from './engine/input';
 import { startLoop } from './engine/loop';
 import { Renderer } from './engine/renderer';
-import { INTERNAL_HEIGHT, INTERNAL_WIDTH } from './game/config';
+import { INTERNAL_HEIGHT, INTERNAL_WIDTH, PALETTE } from './game/config';
 import { Game } from './game/game';
 
 const renderer = new Renderer(INTERNAL_WIDTH, INTERNAL_HEIGHT);
@@ -20,6 +20,8 @@ startLoop({
     game.update(dt);
   },
   render: () => {
+    renderer.beginFrame(PALETTE.ink, PALETTE.parchment);
     game.render(renderer.ctx);
+    renderer.endFrame();
   },
 });

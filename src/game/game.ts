@@ -1,20 +1,34 @@
 /**
  * Orchestrateur du jeu : relie input, physique, salle, encre, dialogues, save
  * et rendu. Les règles métier restent dans les modules purs ; ici on ne fait
- * que les brancher (et dessiner les placeholders de la Phase 1).
+ * que les brancher.
+ *
+ * Rendu « manuscrit moderne » (décision D9) : vectoriel haute résolution —
+ * dalles de décor fusionnées et arrondies, ombres douces, particules d'encre,
+ * squash & stretch du joueur, caméra à inertie. Aucun asset : tout est dessiné.
  */
 import { Camera } from '../engine/camera';
 import type { Input } from '../engine/input';
 import { aabbOverlap } from '../engine/physics';
 import { loadJson, saveJson, type StorageLike } from '../engine/save';
-import { parseTiledMap, type RoomObject } from '../engine/tilemap';
 import {
+  gidAt,
+  mergeSolidTiles,
+  parseTiledMap,
+  type RoomObject,
+  type TileRect,
+} from '../engine/tilemap';
+import {
+  hexAlpha,
   INK,
   INTERACT_MARGIN,
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
   PALETTE,
+  PARTICLES,
+  PHYSICS,
   PLAYER,
+  RENDERING,
   TILE_SIZE,
   TOAST_SECONDS,
   WRITE_RANGE,
@@ -49,6 +63,25 @@ interface ActiveDialogue {
   selected: number;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: string;
+}
+
+interface Mote {
+  x: number;
+  y: number;
+  speed: number;
+  phase: number;
+  size: number;
+}
+
 export class Game {
   private readonly input: Input;
   private readonly storage: StorageLike;
@@ -56,6 +89,10 @@ export class Game {
   private readonly camera = new Camera();
   private readonly room: Room;
   private readonly dialogues: Record<string, DialogueData>;
+  /** Dalles de décor précalculées (tuiles fusionnées, en unités de tuiles). */
+  private readonly slabs: TileRect[];
+  /** Texture papier pré-rendue de la taille de la salle. */
+  private readonly paper: HTMLCanvasElement;
 
   private player: PlayerState;
   private ink: InkState;
@@ -71,12 +108,24 @@ export class Game {
   private exitReached = false;
   private time = 0;
 
+  private readonly particles: Particle[] = [];
+  private readonly motes: Mote[] = [];
+  private prevGrounded = false;
+  private landTimer = 0;
+
   constructor(input: Input, storage: StorageLike) {
     this.input = input;
     this.storage = storage;
     this.bus = createGameBus();
     this.room = new Room(ROOM_ID, parseTiledMap(roomMarge01));
     this.dialogues = { pnj_marge: parseDialogueData(dialoguePnjMarge) };
+    this.slabs = mergeSolidTiles(
+      this.room.map.widthTiles,
+      this.room.map.heightTiles,
+      (tx, ty) => gidAt(this.room.map, tx, ty) > 0,
+    );
+    this.paper = this.createPaperTexture();
+    this.spawnMotes();
 
     this.ink = createInk(INK.max);
     this.player = this.spawnPlayer();
@@ -100,6 +149,64 @@ export class Game {
       facing: 1,
       health: PLAYER.maxHealth,
     };
+  }
+
+  /** Fond parchemin : taches, lignes de réglure et marge, pré-rendus une fois. */
+  private createPaperTexture(): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = this.room.pixelWidth;
+    canvas.height = this.room.pixelHeight;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return canvas;
+
+    ctx.fillStyle = PALETTE.parchment;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Taches de vieillissement du papier
+    for (let i = 0; i < 260; i++) {
+      const radius = 3 + Math.random() * 34;
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+      const shade = Math.random() < 0.6 ? PALETTE.parchmentShade : PALETTE.sepia;
+      gradient.addColorStop(0, hexAlpha(shade, 0.05 + Math.random() * 0.05));
+      gradient.addColorStop(1, hexAlpha(shade, 0));
+      ctx.save();
+      ctx.translate(Math.random() * canvas.width, Math.random() * canvas.height);
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Réglure horizontale discrète (cahier de manuscrit)
+    ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.07);
+    ctx.lineWidth = 1;
+    for (let y = 24; y < canvas.height; y += 24) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    // Ligne de marge
+    ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.1);
+    ctx.beginPath();
+    ctx.moveTo(52, 0);
+    ctx.lineTo(52, canvas.height);
+    ctx.stroke();
+
+    return canvas;
+  }
+
+  private spawnMotes(): void {
+    for (let i = 0; i < PARTICLES.ambientMotes; i++) {
+      this.motes.push({
+        x: Math.random() * this.room.pixelWidth,
+        y: Math.random() * this.room.pixelHeight * 0.8,
+        speed: 3 + Math.random() * 6,
+        phase: Math.random() * Math.PI * 2,
+        size: 0.6 + Math.random() * 1.2,
+      });
+    }
   }
 
   private wireToasts(): void {
@@ -164,12 +271,16 @@ export class Game {
     } else {
       this.updatePlaying(dtSeconds);
     }
+    this.updateParticles(dtSeconds);
     for (const toast of this.toasts) toast.ttl -= dtSeconds;
     while (this.toasts.length > 0 && (this.toasts[0]?.ttl ?? 0) <= 0) this.toasts.shift();
     this.input.endFrame();
   }
 
   private updatePlaying(dtSeconds: number): void {
+    const wasGrounded = this.player.grounded;
+    const prevVy = this.player.body.vy;
+
     this.player = stepPlayer(
       this.player,
       {
@@ -181,6 +292,18 @@ export class Game {
       this.room.isSolid,
       dtSeconds,
     );
+
+    // Feedback : impulsion de saut et atterrissage (squash + éclats d'encre)
+    const feet = { x: this.player.body.x + this.player.body.w / 2, y: this.player.body.y + this.player.body.h };
+    if (this.input.wasPressed('jump') && wasGrounded) {
+      this.burst(feet.x, feet.y, PARTICLES.jumpBurst, PALETTE.sepia, 50);
+    }
+    if (!this.prevGrounded && this.player.grounded && prevVy > 140) {
+      this.landTimer = RENDERING.landSquashSeconds;
+      this.burst(feet.x, feet.y, PARTICLES.landBurst, PALETTE.ink, 60);
+    }
+    this.prevGrounded = this.player.grounded;
+    this.landTimer = Math.max(0, this.landTimer - dtSeconds);
 
     this.checkPickups();
     if (this.input.wasPressed('interact')) this.handleInteract();
@@ -195,6 +318,7 @@ export class Game {
       INTERNAL_HEIGHT,
       this.room.pixelWidth,
       this.room.pixelHeight,
+      1 - Math.exp(-RENDERING.cameraLerpRate * dtSeconds),
     );
   }
 
@@ -241,6 +365,42 @@ export class Game {
     }
   }
 
+  private updateParticles(dtSeconds: number): void {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      if (p === undefined) continue;
+      p.life -= dtSeconds;
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.vy += PARTICLES.gravity * dtSeconds;
+      p.x += p.vx * dtSeconds;
+      p.y += p.vy * dtSeconds;
+    }
+    for (const mote of this.motes) {
+      mote.x += mote.speed * dtSeconds;
+      if (mote.x > this.room.pixelWidth) mote.x = 0;
+    }
+  }
+
+  private burst(x: number, y: number, count: number, color: string, speed: number): void {
+    for (let i = 0; i < count && this.particles.length < PARTICLES.maxCount; i++) {
+      const angle = Math.PI + Math.random() * Math.PI; // demi-cercle vers le haut
+      const velocity = speed * (0.4 + Math.random() * 0.9);
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle + Math.PI / 2) * velocity * (Math.random() < 0.5 ? 1 : -1),
+        vy: Math.sin(angle) * velocity,
+        life: 0.35 + Math.random() * 0.4,
+        maxLife: 0.75,
+        size: 1 + Math.random() * 2,
+        color,
+      });
+    }
+  }
+
   // ---------- Interactions ----------
 
   private playerCenter(): { x: number; y: number } {
@@ -269,6 +429,7 @@ export class Game {
       if (typeof ability !== 'string') continue;
       this.collectedObjects.add(word.id);
       this.unlocked.add(ability);
+      this.burst(word.x + word.width / 2, word.y + word.height / 2, 12, PALETTE.danger, 55);
       this.bus.emit('ability_unlocked', { id: ability });
     }
     for (const fragment of this.room.objectsOfType('fragment')) {
@@ -277,6 +438,7 @@ export class Game {
       if (typeof flag !== 'string') continue;
       this.collectedObjects.add(fragment.id);
       this.storyFlags[flag] = true;
+      this.burst(fragment.x + fragment.width / 2, fragment.y + fragment.height / 2, 12, PALETTE.unwritten, 45);
       this.bus.emit('flag_set', { flag, value: true });
     }
   }
@@ -302,6 +464,7 @@ export class Game {
       .find((o) => this.playerOverlaps(o, INTERACT_MARGIN));
     if (inkwell !== undefined) {
       this.ink = refillInk(this.ink);
+      this.burst(inkwell.x + inkwell.width / 2, inkwell.y, 10, PALETTE.ink, 40);
       this.bus.emit('ink_refilled', { max: this.ink.max });
       this.persist();
     }
@@ -337,6 +500,13 @@ export class Game {
       this.toast('À sec — l\'encre te délave…');
     }
     this.room.writePlatform(nearest);
+    this.burst(
+      nearest.x + nearest.width / 2,
+      nearest.y + nearest.height / 2,
+      PARTICLES.writeBurst,
+      PALETTE.ink,
+      70,
+    );
     this.bus.emit('ink_spent', { amount: ability.inkCost, remaining: this.ink.current });
     this.bus.emit('platform_written', { objectId: nearest.objectId });
   }
@@ -357,16 +527,16 @@ export class Game {
   // ---------- Rendu ----------
 
   render(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = PALETTE.parchment;
-    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
-
     ctx.save();
     ctx.translate(-this.camera.x, -this.camera.y);
 
-    this.renderTiles(ctx);
+    ctx.drawImage(this.paper, 0, 0);
+    this.renderMotes(ctx);
+    this.renderSlabs(ctx);
     this.renderPlatforms(ctx);
     this.renderObjects(ctx);
     this.renderPlayer(ctx);
+    this.renderParticles(ctx);
 
     ctx.restore();
 
@@ -384,37 +554,91 @@ export class Game {
     }
   }
 
-  private renderTiles(ctx: CanvasRenderingContext2D): void {
-    const txMin = Math.floor(this.camera.x / TILE_SIZE);
-    const txMax = Math.floor((this.camera.x + INTERNAL_WIDTH - 1) / TILE_SIZE);
-    const tyMin = Math.floor(this.camera.y / TILE_SIZE);
-    const tyMax = Math.floor((this.camera.y + INTERNAL_HEIGHT - 1) / TILE_SIZE);
-    for (let ty = tyMin; ty <= tyMax; ty++) {
-      for (let tx = txMin; tx <= txMax; tx++) {
-        if (!this.room.isSolid(tx, ty) || tx < 0 || ty < 0) continue;
-        ctx.fillStyle = PALETTE.parchmentShade;
-        ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-        // Liseré d'encre sur les surfaces exposées (lisibilité des plateformes).
-        if (!this.room.isSolid(tx, ty - 1)) {
-          ctx.fillStyle = PALETTE.sepia;
-          ctx.fillRect(tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, 2);
-        }
-      }
+  private renderMotes(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = hexAlpha(PALETTE.sepia, 0.18);
+    for (const mote of this.motes) {
+      const y = mote.y + Math.sin(this.time * 0.7 + mote.phase) * 6;
+      ctx.beginPath();
+      ctx.arc(mote.x, y, mote.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private renderSlabs(ctx: CanvasRenderingContext2D): void {
+    const viewLeft = this.camera.x - TILE_SIZE;
+    const viewRight = this.camera.x + INTERNAL_WIDTH + TILE_SIZE;
+
+    ctx.shadowColor = RENDERING.shadowColor;
+    ctx.shadowBlur = RENDERING.shadowBlur;
+    ctx.shadowOffsetY = RENDERING.shadowOffsetY;
+    ctx.fillStyle = PALETTE.parchmentShade;
+    for (const slab of this.slabs) {
+      const x = slab.x * TILE_SIZE;
+      const y = slab.y * TILE_SIZE;
+      const w = slab.w * TILE_SIZE;
+      const h = slab.h * TILE_SIZE;
+      if (x + w < viewLeft || x > viewRight) continue;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, RENDERING.slabCornerRadius);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+
+    // Finitions : liseré sépia + rehaut clair sur la face supérieure
+    for (const slab of this.slabs) {
+      const x = slab.x * TILE_SIZE;
+      const y = slab.y * TILE_SIZE;
+      const w = slab.w * TILE_SIZE;
+      const h = slab.h * TILE_SIZE;
+      if (x + w < viewLeft || x > viewRight) continue;
+      ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.35);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, RENDERING.slabCornerRadius);
+      ctx.stroke();
+      ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.55);
+      ctx.fillRect(x + RENDERING.slabCornerRadius, y + 1, w - RENDERING.slabCornerRadius * 2, 1.5);
     }
   }
 
   private renderPlatforms(ctx: CanvasRenderingContext2D): void {
     for (const platform of this.room.platforms) {
       if (platform.written) {
-        // Plateforme d'encre matérialisée
+        // Plateforme d'encre : trait plein, reflet, gouttes qui perlent
+        ctx.shadowColor = RENDERING.shadowColor;
+        ctx.shadowBlur = RENDERING.shadowBlur;
+        ctx.shadowOffsetY = RENDERING.shadowOffsetY;
         ctx.fillStyle = PALETTE.ink;
-        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+        ctx.beginPath();
+        ctx.roundRect(platform.x, platform.y, platform.width, platform.height, 6);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.25);
+        ctx.fillRect(platform.x + 5, platform.y + 2, platform.width - 10, 1.5);
+        const dripX = platform.x + (platform.objectId * 13) % Math.max(1, platform.width - 8) + 4;
+        ctx.fillStyle = PALETTE.ink;
+        ctx.beginPath();
+        ctx.ellipse(dripX, platform.y + platform.height + 2, 1.6, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
       } else {
-        // Emplacement « non-écrit » : contour pointillé spectral
-        ctx.strokeStyle = PALETTE.unwritten;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.strokeRect(platform.x + 0.5, platform.y + 0.5, platform.width - 1, platform.height - 1);
+        // Emplacement « non-écrit » : lueur spectrale pulsante
+        const pulse = 0.45 + 0.25 * Math.sin(this.time * 2.5 + platform.objectId);
+        ctx.shadowColor = PALETTE.unwritten;
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = hexAlpha(PALETTE.unwritten, 0.14);
+        ctx.beginPath();
+        ctx.roundRect(platform.x, platform.y, platform.width, platform.height, 6);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = hexAlpha(PALETTE.unwritten, pulse + 0.3);
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([5, 4]);
+        ctx.lineDashOffset = -this.time * 8;
+        ctx.beginPath();
+        ctx.roundRect(platform.x + 0.5, platform.y + 0.5, platform.width - 1, platform.height - 1, 6);
+        ctx.stroke();
         ctx.setLineDash([]);
       }
     }
@@ -425,65 +649,159 @@ export class Game {
       if (this.collectedObjects.has(word.id)) continue;
       const ability = word.properties['ability'];
       const def = typeof ability === 'string' ? getAbility(ability) : null;
-      const bob = Math.sin(this.time * 3) * 3;
+      const cx = word.x + word.width / 2;
+      const cy = word.y + word.height / 2 + Math.sin(this.time * 2.2) * 3;
+      // Halo
+      ctx.fillStyle = hexAlpha(PALETTE.danger, 0.08 + 0.04 * Math.sin(this.time * 3));
+      ctx.beginPath();
+      ctx.arc(cx, cy - 3, 16, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowColor = PALETTE.danger;
+      ctx.shadowBlur = 10;
       ctx.fillStyle = PALETTE.danger;
-      ctx.font = 'bold 10px Georgia, serif';
+      ctx.font = 'italic bold 12px Georgia, serif';
       ctx.textAlign = 'center';
-      ctx.fillText(def?.word ?? '???', word.x + word.width / 2, word.y + word.height / 2 + bob);
+      ctx.fillText(def?.word ?? '???', cx, cy);
+      ctx.shadowBlur = 0;
     }
 
     for (const fragment of this.room.objectsOfType('fragment')) {
       if (this.collectedObjects.has(fragment.id)) continue;
       const cx = fragment.x + fragment.width / 2;
-      const cy = fragment.y + fragment.height / 2 + Math.sin(this.time * 2) * 2;
+      const cy = fragment.y + fragment.height / 2 + Math.sin(this.time * 1.8) * 2.5;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = PALETTE.unwritten;
-      ctx.fillRect(-4, -4, 8, 8);
+      ctx.rotate(this.time * 0.8);
+      ctx.shadowColor = PALETTE.unwritten;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = hexAlpha(PALETTE.unwritten, 0.9);
+      ctx.beginPath();
+      ctx.roundRect(-4.5, -4.5, 9, 9, 2);
+      ctx.fill();
       ctx.restore();
     }
 
     for (const inkwell of this.room.objectsOfType('inkwell')) {
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
       ctx.fillStyle = PALETTE.sepia;
-      ctx.fillRect(inkwell.x, inkwell.y + 8, inkwell.width, inkwell.height - 8);
+      ctx.beginPath();
+      ctx.roundRect(inkwell.x - 1, inkwell.y + 7, inkwell.width + 2, inkwell.height - 7, 4);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // Col et surface d'encre frémissante
+      ctx.fillStyle = PALETTE.sepia;
+      ctx.fillRect(inkwell.x + 2, inkwell.y + 2, inkwell.width - 4, 6);
       ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(inkwell.x + 2, inkwell.y, inkwell.width - 4, 8);
+      ctx.beginPath();
+      ctx.ellipse(
+        inkwell.x + inkwell.width / 2,
+        inkwell.y + 3,
+        inkwell.width / 2 - 2.5,
+        2 + Math.sin(this.time * 2) * 0.4,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
       this.renderInteractHint(ctx, inkwell);
     }
 
     for (const exit of this.room.objectsOfType('exit')) {
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
       ctx.fillStyle = PALETTE.sepia;
-      ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
-      ctx.fillStyle = PALETTE.ink;
-      ctx.fillRect(exit.x + exit.width - 5, exit.y + exit.height / 2 - 1, 2, 2);
+      ctx.beginPath();
+      ctx.roundRect(exit.x - 2, exit.y, exit.width + 4, exit.height, [8, 8, 0, 0]);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      const doorway = ctx.createLinearGradient(exit.x, exit.y, exit.x, exit.y + exit.height);
+      doorway.addColorStop(0, hexAlpha(PALETTE.ink, 0.85));
+      doorway.addColorStop(1, hexAlpha(PALETTE.ink, 0.5));
+      ctx.fillStyle = doorway;
+      ctx.beginPath();
+      ctx.roundRect(exit.x + 1, exit.y + 3, exit.width - 2, exit.height - 3, [6, 6, 0, 0]);
+      ctx.fill();
     }
 
     for (const npc of this.room.objectsOfType('npc')) {
+      const bob = Math.sin(this.time * 1.6) * 1.2;
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
       ctx.fillStyle = PALETTE.sepia;
-      ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
+      ctx.beginPath();
+      ctx.roundRect(npc.x, npc.y + bob, npc.width, npc.height - bob, [6, 6, 3, 3]);
+      ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.fillStyle = PALETTE.parchment;
-      ctx.fillRect(npc.x + 2, npc.y + 4, 2, 2);
-      ctx.fillRect(npc.x + npc.width - 4, npc.y + 4, 2, 2);
+      ctx.beginPath();
+      ctx.arc(npc.x + 3.5, npc.y + 6 + bob, 1.2, 0, Math.PI * 2);
+      ctx.arc(npc.x + npc.width - 3.5, npc.y + 6 + bob, 1.2, 0, Math.PI * 2);
+      ctx.fill();
       this.renderInteractHint(ctx, npc);
     }
   }
 
   private renderInteractHint(ctx: CanvasRenderingContext2D, obj: RoomObject): void {
     if (this.mode !== 'playing' || !this.playerOverlaps(obj, INTERACT_MARGIN)) return;
-    ctx.fillStyle = PALETTE.ink;
-    ctx.font = 'bold 9px Georgia, serif';
+    const cx = obj.x + obj.width / 2;
+    const y = obj.y - 12 + Math.sin(this.time * 4) * 1.5;
+    ctx.fillStyle = hexAlpha(PALETTE.ink, 0.85);
+    ctx.beginPath();
+    ctx.roundRect(cx - 6, y - 8, 12, 11, 3);
+    ctx.fill();
+    ctx.fillStyle = PALETTE.parchment;
+    ctx.font = 'bold 8px Georgia, serif';
     ctx.textAlign = 'center';
-    ctx.fillText('E', obj.x + obj.width / 2, obj.y - 5);
+    ctx.fillText('E', cx, y);
   }
 
   private renderPlayer(ctx: CanvasRenderingContext2D): void {
-    const { body, facing } = this.player;
+    const { body, facing, grounded } = this.player;
+
+    // Squash & stretch : étiré en chute/saut, écrasé à l'atterrissage
+    let stretch = 1;
+    if (!grounded) {
+      stretch = 1 + Math.min(Math.abs(body.vy) / PHYSICS.maxFallSpeed, 1) * 0.16;
+    }
+    if (this.landTimer > 0) {
+      stretch = 1 - 0.22 * (this.landTimer / RENDERING.landSquashSeconds);
+    }
+    const h = body.h * stretch;
+    const w = body.w / stretch;
+    const footX = body.x + body.w / 2;
+    const footY = body.y + body.h;
+
+    // Ombre au sol
+    if (grounded) {
+      ctx.fillStyle = hexAlpha(PALETTE.ink, 0.15);
+      ctx.beginPath();
+      ctx.ellipse(footX, footY + 1.5, w * 0.55, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Silhouette d'encre
+    ctx.shadowColor = RENDERING.shadowColor;
+    ctx.shadowBlur = 4;
     ctx.fillStyle = PALETTE.ink;
-    ctx.fillRect(Math.round(body.x), Math.round(body.y), body.w, body.h);
+    ctx.beginPath();
+    ctx.roundRect(footX - w / 2, footY - h, w, h, [w * 0.5, w * 0.5, w * 0.28, w * 0.28]);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
     // L'œil, côté regard
     ctx.fillStyle = PALETTE.parchment;
-    const eyeX = facing === 1 ? body.x + body.w - 4 : body.x + 2;
-    ctx.fillRect(Math.round(eyeX), Math.round(body.y + 4), 2, 2);
+    ctx.beginPath();
+    ctx.arc(footX + facing * w * 0.18, footY - h + 5.5, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private renderParticles(ctx: CanvasRenderingContext2D): void {
+    for (const p of this.particles) {
+      ctx.fillStyle = hexAlpha(p.color, Math.max(0, p.life / p.maxLife));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }

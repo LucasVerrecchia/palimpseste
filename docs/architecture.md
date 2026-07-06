@@ -69,6 +69,22 @@ textes dans `data/dialogues/*.json` sont des placeholders marqués
 `[TODO narration]`. L'écriture narrative se fait en binôme humain/IA dans une
 passe dédiée (Phase 3), pas au fil du code.
 
+### D9 — Pivot direction artistique : « manuscrit moderne » (2026-07-06)
+Décision du propriétaire du projet après playtest de la Phase 1 : abandon du
+pixel art 8-bit (contrainte auto-imposée dans notre spec, PAS une exigence du
+brief du cours) au profit d'un rendu **vectoriel haute résolution** dessiné au
+code — direction « indie minimal » (formes lisses arrondies, ombres douces,
+particules d'encre, caméra à inertie, squash & stretch).
+
+Alternatives évaluées et rejetées : Pixi.js (dépendance runtime + rework moyen
+pour un gain marginal ici) et Phaser (réécriture quasi totale, perte de
+l'argument « moteur maison »). Choix retenu : Canvas 2D natif, **toujours zéro
+dépendance runtime**. La palette « manuscrit » est conservée (identité
+thématique). Techniquement : le canvas occupe la fenêtre à la résolution
+native (devicePixelRatio), la vue reste en unités monde 480×270 (physique et
+level design inchangés), et les tuiles solides sont fusionnées en dalles
+arrondies par `mergeSolidTiles` (pure, testée) pour casser le look « damier ».
+
 ## Diagramme de dépendances (cible)
 
 ```

@@ -5,6 +5,7 @@
 
 Mini-Metroidvania web (~1h–1h30) réalisé dans le cadre du cours **Usage IA Gen**.
 TypeScript strict · Vite · Canvas 2D · **zéro dépendance runtime**.
+Rendu vectoriel « manuscrit moderne » entièrement dessiné au code (aucun asset).
 
 ## Lancer le projet
 

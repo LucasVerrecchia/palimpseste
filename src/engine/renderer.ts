@@ -1,42 +1,77 @@
 /**
- * Abstraction Canvas 2D : résolution interne fixe, mise à l'échelle entière
- * vers l'écran, rendu pixel-perfect (aucun lissage).
+ * Abstraction Canvas 2D — rendu vectoriel haute résolution.
+ *
+ * Le monde et l'UI restent exprimés en « unités monde » (vue de 480×270),
+ * mais le canvas occupe toute la fenêtre à la résolution native de l'écran
+ * (devicePixelRatio inclus) : les formes et le texte sont dessinés en
+ * vectoriel, donc nets à n'importe quelle taille. La vue est letterboxée
+ * pour préserver le ratio 16:9.
  */
-import { computeIntegerScale } from './scaling';
 
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
-  readonly width: number;
-  readonly height: number;
+  readonly viewWidth: number;
+  readonly viewHeight: number;
+  private target: Window | null = null;
 
-  constructor(width: number, height: number) {
-    this.width = width;
-    this.height = height;
+  constructor(viewWidth: number, viewHeight: number) {
+    this.viewWidth = viewWidth;
+    this.viewHeight = viewHeight;
     this.canvas = document.createElement('canvas');
-    this.canvas.width = width;
-    this.canvas.height = height;
-
     const ctx = this.canvas.getContext('2d');
     if (ctx === null) {
       throw new Error('Canvas 2D non disponible dans ce navigateur.');
     }
     this.ctx = ctx;
-    this.ctx.imageSmoothingEnabled = false;
   }
 
-  /** Insère le canvas dans le DOM et branche l'adaptation à la fenêtre. */
   mount(parent: HTMLElement, target: Window): void {
+    this.target = target;
     parent.appendChild(this.canvas);
-    this.fitTo(target);
+    this.resize();
     target.addEventListener('resize', () => {
-      this.fitTo(target);
+      this.resize();
     });
   }
 
-  private fitTo(target: Window): void {
-    const scale = computeIntegerScale(target.innerWidth, target.innerHeight, this.width, this.height);
-    this.canvas.style.width = `${String(this.width * scale)}px`;
-    this.canvas.style.height = `${String(this.height * scale)}px`;
+  private resize(): void {
+    if (this.target === null) return;
+    const dpr = this.target.devicePixelRatio;
+    this.canvas.width = Math.round(this.target.innerWidth * dpr);
+    this.canvas.height = Math.round(this.target.innerHeight * dpr);
+    this.canvas.style.width = `${String(this.target.innerWidth)}px`;
+    this.canvas.style.height = `${String(this.target.innerHeight)}px`;
+  }
+
+  /**
+   * Prépare la frame : letterbox, transformation vue → écran, clip et fond.
+   * Tout ce qui est dessiné ensuite l'est en coordonnées de vue (480×270).
+   */
+  beginFrame(letterboxColor: string, backgroundColor: string): void {
+    if (this.target === null) return;
+    const { ctx } = this;
+    const dpr = this.target.devicePixelRatio;
+    const screenW = this.target.innerWidth;
+    const screenH = this.target.innerHeight;
+    const scale = Math.min(screenW / this.viewWidth, screenH / this.viewHeight);
+    const offsetX = (screenW - this.viewWidth * scale) / 2;
+    const offsetY = (screenH - this.viewHeight * scale) / 2;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = letterboxColor;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, dpr * offsetX, dpr * offsetY);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, this.viewWidth, this.viewHeight);
+    ctx.clip();
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, this.viewWidth, this.viewHeight);
+  }
+
+  endFrame(): void {
+    this.ctx.restore();
   }
 }

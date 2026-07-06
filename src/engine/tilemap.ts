@@ -128,3 +128,51 @@ export function gidAt(map: ParsedMap, tileX: number, tileY: number): number {
   if (tileX < 0 || tileX >= map.widthTiles || tileY < 0 || tileY >= map.heightTiles) return 0;
   return map.ground[tileY * map.widthTiles + tileX] ?? 0;
 }
+
+/** Rectangle en unités de tuiles. */
+export interface TileRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Fusionne les tuiles solides en grands rectangles (« dalles ») : les
+ * séquences horizontales identiques de lignes consécutives sont empilées.
+ * Utilisé par le rendu pour dessiner des formes continues plutôt qu'une
+ * grille de carrés — c'est ce qui casse le look « damier 8-bit ».
+ * Fonction pure, testée.
+ */
+export function mergeSolidTiles(
+  width: number,
+  height: number,
+  isSolid: (tileX: number, tileY: number) => boolean,
+): TileRect[] {
+  const rects: TileRect[] = [];
+  let openAbove = new Map<string, TileRect>();
+
+  for (let y = 0; y < height; y++) {
+    const openHere = new Map<string, TileRect>();
+    let runStart = -1;
+    for (let x = 0; x <= width; x++) {
+      const solid = x < width && isSolid(x, y);
+      if (solid && runStart < 0) runStart = x;
+      if (!solid && runStart >= 0) {
+        const key = `${String(runStart)}:${String(x - runStart)}`;
+        const above = openAbove.get(key);
+        if (above !== undefined) {
+          above.h += 1;
+          openHere.set(key, above);
+        } else {
+          const rect: TileRect = { x: runStart, y, w: x - runStart, h: 1 };
+          rects.push(rect);
+          openHere.set(key, rect);
+        }
+        runStart = -1;
+      }
+    }
+    openAbove = openHere;
+  }
+  return rects;
+}
