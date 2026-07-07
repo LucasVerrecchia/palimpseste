@@ -1,24 +1,32 @@
 /**
- * Orchestrateur du jeu : relie input, physique, salle, encre, dialogues, save
- * et rendu. Les règles métier restent dans les modules purs ; ici on ne fait
- * que les brancher.
+ * Orchestrateur du jeu : relie input souris/clavier, physique, salle, encre,
+ * dialogues, save et rendu. Les règles métier restent dans les modules purs.
  *
- * Rendu « manuscrit moderne » (décision D9) : vectoriel haute résolution —
- * dalles de décor fusionnées et arrondies, ombres douces, particules d'encre,
- * squash & stretch du joueur, caméra à inertie. Aucun asset : tout est dessiné.
+ * Mécanique centrale (décision D10) : le joueur TRACE ses blocs d'encre à la
+ * souris (clic gauche) dans une portée limitée autour de lui, et les EFFACE
+ * (clic droit) pour récupérer l'encre. La difficulté vient du budget d'encre
+ * entre deux encriers et du puzzle « effacer derrière soi pour réutiliser ».
+ *
+ * Rendu « manuscrit moderne » (D9) : vectoriel haute résolution, dalles
+ * arrondies ombrées, particules d'encre, squash & stretch. Aucun asset.
  */
 import { Camera } from '../engine/camera';
 import type { Input } from '../engine/input';
 import { aabbOverlap } from '../engine/physics';
+import type { Pointer } from '../engine/pointer';
+import type { Viewport } from '../engine/renderer';
 import { loadJson, saveJson, type StorageLike } from '../engine/save';
 import {
   gidAt,
   mergeSolidTiles,
   parseTiledMap,
+  tilesBetween,
   type RoomObject,
+  type TileCoord,
   type TileRect,
 } from '../engine/tilemap';
 import {
+  DRAW,
   hexAlpha,
   INK,
   INTERACT_MARGIN,
@@ -31,7 +39,6 @@ import {
   RENDERING,
   TILE_SIZE,
   TOAST_SECONDS,
-  WRITE_RANGE,
 } from './config';
 import { createGameBus, type GameEventBus } from './events';
 import {
@@ -45,11 +52,11 @@ import {
 } from './narrative/dialogue';
 import { getAbility, hasAbility } from './player/abilities';
 import { stepPlayer, type PlayerState } from './player/controller';
-import { createInk, refillInk, spendInk, type InkState } from './player/ink';
+import { createInk, reclaimInk, refillInk, spendInk, type InkState } from './player/ink';
 import { parseSave, SAVE_KEY, SAVE_VERSION, type SaveData } from './save';
 import { drawDialogueBox } from './ui/dialogue_box';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
-import { Room, type UnwrittenPlatform } from './world/room';
+import { Room } from './world/room';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
 
@@ -82,16 +89,25 @@ interface Mote {
   size: number;
 }
 
+interface Cursor {
+  tx: number;
+  ty: number;
+  worldX: number;
+  worldY: number;
+  inReach: boolean;
+}
+
 export class Game {
   private readonly input: Input;
+  private readonly pointer: Pointer;
+  private readonly viewport: Viewport;
   private readonly storage: StorageLike;
   private readonly bus: GameEventBus;
   private readonly camera = new Camera();
   private readonly room: Room;
   private readonly dialogues: Record<string, DialogueData>;
-  /** Dalles de décor précalculées (tuiles fusionnées, en unités de tuiles). */
+  /** Dalles de décor précalculées (tuiles statiques fusionnées). */
   private readonly slabs: TileRect[];
-  /** Texture papier pré-rendue de la taille de la salle. */
   private readonly paper: HTMLCanvasElement;
 
   private player: PlayerState;
@@ -101,6 +117,8 @@ export class Game {
   private endingLeaning = 0;
   private readonly visitedRooms = new Set<string>();
   private readonly collectedObjects = new Set<number>();
+  /** Où renvoie la touche R (dernier encrier touché, sinon spawn). */
+  private checkpoint: { x: number; y: number };
 
   private mode: Mode = 'playing';
   private dialogue: ActiveDialogue | null = null;
@@ -113,8 +131,16 @@ export class Game {
   private prevGrounded = false;
   private landTimer = 0;
 
-  constructor(input: Input, storage: StorageLike) {
+  // Tracé à la souris : dernière tuile peinte/effacée pour raccorder le trait.
+  private lastPaint: TileCoord | null = null;
+  private lastErase: TileCoord | null = null;
+  private cursor: Cursor | null = null;
+  private toastCooldown = 0;
+
+  constructor(input: Input, pointer: Pointer, viewport: Viewport, storage: StorageLike) {
     this.input = input;
+    this.pointer = pointer;
+    this.viewport = viewport;
     this.storage = storage;
     this.bus = createGameBus();
     this.room = new Room(ROOM_ID, parseTiledMap(roomMarge01));
@@ -129,6 +155,7 @@ export class Game {
 
     this.ink = createInk(INK.max);
     this.player = this.spawnPlayer();
+    this.checkpoint = { x: this.player.body.x, y: this.player.body.y };
 
     this.wireToasts();
     this.restoreFromSave();
@@ -151,7 +178,6 @@ export class Game {
     };
   }
 
-  /** Fond parchemin : taches, lignes de réglure et marge, pré-rendus une fois. */
   private createPaperTexture(): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
     canvas.width = this.room.pixelWidth;
@@ -162,8 +188,7 @@ export class Game {
     ctx.fillStyle = PALETTE.parchment;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Taches de vieillissement du papier
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 300; i++) {
       const radius = 3 + Math.random() * 34;
       const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
       const shade = Math.random() < 0.6 ? PALETTE.parchmentShade : PALETTE.sepia;
@@ -178,7 +203,6 @@ export class Game {
       ctx.restore();
     }
 
-    // Réglure horizontale discrète (cahier de manuscrit)
     ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.07);
     ctx.lineWidth = 1;
     for (let y = 24; y < canvas.height; y += 24) {
@@ -187,7 +211,6 @@ export class Game {
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
-    // Ligne de marge
     ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.1);
     ctx.beginPath();
     ctx.moveTo(52, 0);
@@ -212,13 +235,18 @@ export class Game {
   private wireToasts(): void {
     this.bus.on('ability_unlocked', ({ id }) => {
       const def = getAbility(id);
-      if (def !== null) this.toast(`Mot retrouvé : ${def.word} — [X] pour écrire`);
+      if (def !== null) {
+        this.toast(`Mot retrouvé : ${def.word} — clic gauche pour tracer, clic droit pour effacer`);
+      }
     });
     this.bus.on('game_saved', () => {
-      this.toast('Encrier — le manuscrit retient ta place.');
+      this.toast('Encrier — encre pleine, place retenue (R pour y revenir).');
     });
     this.bus.on('flag_set', ({ flag }) => {
       if (flag === 'fragment_marge') this.toast('Fragment de page recueilli.');
+    });
+    this.bus.on('player_respawned', () => {
+      this.toast('Le manuscrit te ramène à l\'encrier.');
     });
   }
 
@@ -233,8 +261,8 @@ export class Game {
     if (save.playerPos.room === ROOM_ID) {
       this.player.body.x = save.playerPos.x;
       this.player.body.y = save.playerPos.y;
+      this.checkpoint = { x: save.playerPos.x, y: save.playerPos.y };
     }
-    // Les objets uniques déjà pris ne doivent pas réapparaître.
     if (this.storyFlags['fragment_marge'] === true) {
       const fragment = this.room.firstObjectOfType('fragment');
       if (fragment !== null) this.collectedObjects.add(fragment.id);
@@ -266,6 +294,7 @@ export class Game {
 
   update(dtSeconds: number): void {
     this.time += dtSeconds;
+    this.toastCooldown = Math.max(0, this.toastCooldown - dtSeconds);
     if (this.mode === 'dialogue') {
       this.updateDialogue();
     } else {
@@ -293,7 +322,6 @@ export class Game {
       dtSeconds,
     );
 
-    // Feedback : impulsion de saut et atterrissage (squash + éclats d'encre)
     const feet = { x: this.player.body.x + this.player.body.w / 2, y: this.player.body.y + this.player.body.h };
     if (this.input.wasPressed('jump') && wasGrounded) {
       this.burst(feet.x, feet.y, PARTICLES.jumpBurst, PALETTE.sepia, 50);
@@ -307,7 +335,8 @@ export class Game {
 
     this.checkPickups();
     if (this.input.wasPressed('interact')) this.handleInteract();
-    if (this.input.wasPressed('write')) this.handleWrite();
+    if (this.input.wasPressed('respawn')) this.respawn();
+    this.updateCursorAndDrawing();
     this.checkExit();
 
     const center = this.playerCenter();
@@ -386,7 +415,7 @@ export class Game {
 
   private burst(x: number, y: number, count: number, color: string, speed: number): void {
     for (let i = 0; i < count && this.particles.length < PARTICLES.maxCount; i++) {
-      const angle = Math.PI + Math.random() * Math.PI; // demi-cercle vers le haut
+      const angle = Math.PI + Math.random() * Math.PI;
       const velocity = speed * (0.4 + Math.random() * 0.9);
       this.particles.push({
         x,
@@ -399,6 +428,102 @@ export class Game {
         color,
       });
     }
+  }
+
+  // ---------- Tracé d'encre à la souris ----------
+
+  private updateCursorAndDrawing(): void {
+    // Position monde du curseur (écran → vue → monde).
+    const view = this.viewport.screenToView(this.pointer.clientX, this.pointer.clientY);
+    const worldX = view.x + this.camera.x;
+    const worldY = view.y + this.camera.y;
+    const tx = Math.floor(worldX / TILE_SIZE);
+    const ty = Math.floor(worldY / TILE_SIZE);
+    this.cursor = { tx, ty, worldX, worldY, inReach: this.tileInReach(tx, ty) };
+
+    if (!hasAbility(this.unlocked, 'ecrire')) {
+      this.lastPaint = null;
+      this.lastErase = null;
+      return;
+    }
+
+    if (this.pointer.drawing) {
+      this.strokePaint(tx, ty);
+    } else {
+      this.lastPaint = null;
+    }
+
+    if (this.pointer.erasing) {
+      this.strokeErase(tx, ty);
+    } else {
+      this.lastErase = null;
+    }
+  }
+
+  private tileInReach(tx: number, ty: number): boolean {
+    const center = this.playerCenter();
+    const cx = tx * TILE_SIZE + TILE_SIZE / 2;
+    const cy = ty * TILE_SIZE + TILE_SIZE / 2;
+    return Math.hypot(cx - center.x, cy - center.y) <= INK.reach;
+  }
+
+  private tileOverlapsPlayer(tx: number, ty: number): boolean {
+    const { body } = this.player;
+    return aabbOverlap(body.x, body.y, body.w, body.h, tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  }
+
+  private strokePaint(tx: number, ty: number): void {
+    const from = this.lastPaint ?? { x: tx, y: ty };
+    for (const tile of tilesBetween(from.x, from.y, tx, ty)) this.tryPaint(tile.x, tile.y);
+    this.lastPaint = { x: tx, y: ty };
+  }
+
+  private strokeErase(tx: number, ty: number): void {
+    const from = this.lastErase ?? { x: tx, y: ty };
+    for (const tile of tilesBetween(from.x, from.y, tx, ty)) this.tryErase(tile.x, tile.y);
+    this.lastErase = { x: tx, y: ty };
+  }
+
+  private tryPaint(tx: number, ty: number): void {
+    if (!this.room.isPaintable(tx, ty)) return;
+    if (!this.tileInReach(tx, ty)) return;
+    if (this.tileOverlapsPlayer(tx, ty)) return;
+
+    const spent = spendInk(this.ink, INK.costPerTile);
+    if (spent.healthCost > 0 && this.player.health - spent.healthCost < 1) {
+      if (this.toastCooldown <= 0) {
+        this.toast('Trop délavé — efface de l\'encre (clic droit) pour continuer.');
+        this.toastCooldown = 1.4;
+      }
+      return;
+    }
+    this.ink = spent.ink;
+    if (spent.healthCost > 0) {
+      this.player = { ...this.player, health: Math.max(1, this.player.health - spent.healthCost) };
+      this.burst(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, 2, PALETTE.danger, 30);
+    }
+    this.room.paintInk(tx, ty);
+    this.burst(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, PARTICLES.drawBurst, PALETTE.ink, 35);
+  }
+
+  private tryErase(tx: number, ty: number): void {
+    if (!this.room.hasInk(tx, ty)) return;
+    if (!this.tileInReach(tx, ty)) return;
+    this.room.eraseInk(tx, ty);
+    this.ink = reclaimInk(this.ink, INK.costPerTile);
+    this.bus.emit('ink_reclaimed', { amount: INK.costPerTile });
+    this.burst(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, PARTICLES.eraseBurst, PALETTE.unwritten, 40);
+  }
+
+  private respawn(): void {
+    this.player = {
+      body: { ...this.player.body, x: this.checkpoint.x, y: this.checkpoint.y, vx: 0, vy: 0 },
+      grounded: false,
+      facing: this.player.facing,
+      health: this.player.health,
+    };
+    this.ink = refillInk(this.ink);
+    this.bus.emit('player_respawned', { x: this.checkpoint.x, y: this.checkpoint.y });
   }
 
   // ---------- Interactions ----------
@@ -438,7 +563,7 @@ export class Game {
       if (typeof flag !== 'string') continue;
       this.collectedObjects.add(fragment.id);
       this.storyFlags[flag] = true;
-      this.burst(fragment.x + fragment.width / 2, fragment.y + fragment.height / 2, 12, PALETTE.unwritten, 45);
+      this.burst(fragment.x + fragment.width / 2, fragment.y + fragment.height / 2, 16, PALETTE.unwritten, 50);
       this.bus.emit('flag_set', { flag, value: true });
     }
   }
@@ -464,51 +589,10 @@ export class Game {
       .find((o) => this.playerOverlaps(o, INTERACT_MARGIN));
     if (inkwell !== undefined) {
       this.ink = refillInk(this.ink);
+      this.checkpoint = { x: this.player.body.x, y: this.player.body.y };
       this.burst(inkwell.x + inkwell.width / 2, inkwell.y, 10, PALETTE.ink, 40);
-      this.bus.emit('ink_refilled', { max: this.ink.max });
       this.persist();
     }
-  }
-
-  private handleWrite(): void {
-    const ability = getAbility('ecrire');
-    if (ability === null || !hasAbility(this.unlocked, 'ecrire')) {
-      this.toast('Tu ne sais pas encore écrire…');
-      return;
-    }
-    const center = this.playerCenter();
-    let nearest: UnwrittenPlatform | null = null;
-    let nearestDist = Infinity;
-    for (const platform of this.room.platforms) {
-      if (platform.written) continue;
-      const dx = platform.x + platform.width / 2 - center.x;
-      const dy = platform.y + platform.height / 2 - center.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < nearestDist) {
-        nearest = platform;
-        nearestDist = dist;
-      }
-    }
-    if (nearest === null || nearestDist > WRITE_RANGE) {
-      this.toast('Rien à écrire à portée.');
-      return;
-    }
-    const spent = spendInk(this.ink, ability.inkCost);
-    this.ink = spent.ink;
-    if (spent.healthCost > 0) {
-      this.player = { ...this.player, health: Math.max(0, this.player.health - spent.healthCost) };
-      this.toast('À sec — l\'encre te délave…');
-    }
-    this.room.writePlatform(nearest);
-    this.burst(
-      nearest.x + nearest.width / 2,
-      nearest.y + nearest.height / 2,
-      PARTICLES.writeBurst,
-      PALETTE.ink,
-      70,
-    );
-    this.bus.emit('ink_spent', { amount: ability.inkCost, remaining: this.ink.current });
-    this.bus.emit('platform_written', { objectId: nearest.objectId });
   }
 
   private checkExit(): void {
@@ -533,10 +617,11 @@ export class Game {
     ctx.drawImage(this.paper, 0, 0);
     this.renderMotes(ctx);
     this.renderSlabs(ctx);
-    this.renderPlatforms(ctx);
+    this.renderInk(ctx);
     this.renderObjects(ctx);
     this.renderPlayer(ctx);
     this.renderParticles(ctx);
+    this.renderCursor(ctx);
 
     ctx.restore();
 
@@ -564,34 +649,30 @@ export class Game {
     }
   }
 
+  private roundedSlab(ctx: CanvasRenderingContext2D, rect: TileRect, radius: number): void {
+    ctx.beginPath();
+    ctx.roundRect(rect.x * TILE_SIZE, rect.y * TILE_SIZE, rect.w * TILE_SIZE, rect.h * TILE_SIZE, radius);
+    ctx.fill();
+  }
+
   private renderSlabs(ctx: CanvasRenderingContext2D): void {
     const viewLeft = this.camera.x - TILE_SIZE;
     const viewRight = this.camera.x + INTERNAL_WIDTH + TILE_SIZE;
+    const visible = this.slabs.filter((s) => s.x * TILE_SIZE <= viewRight && (s.x + s.w) * TILE_SIZE >= viewLeft);
 
     ctx.shadowColor = RENDERING.shadowColor;
     ctx.shadowBlur = RENDERING.shadowBlur;
     ctx.shadowOffsetY = RENDERING.shadowOffsetY;
     ctx.fillStyle = PALETTE.parchmentShade;
-    for (const slab of this.slabs) {
-      const x = slab.x * TILE_SIZE;
-      const y = slab.y * TILE_SIZE;
-      const w = slab.w * TILE_SIZE;
-      const h = slab.h * TILE_SIZE;
-      if (x + w < viewLeft || x > viewRight) continue;
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, RENDERING.slabCornerRadius);
-      ctx.fill();
-    }
+    for (const slab of visible) this.roundedSlab(ctx, slab, RENDERING.slabCornerRadius);
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
 
-    // Finitions : liseré sépia + rehaut clair sur la face supérieure
-    for (const slab of this.slabs) {
+    for (const slab of visible) {
       const x = slab.x * TILE_SIZE;
       const y = slab.y * TILE_SIZE;
       const w = slab.w * TILE_SIZE;
       const h = slab.h * TILE_SIZE;
-      if (x + w < viewLeft || x > viewRight) continue;
       ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.35);
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -602,45 +683,19 @@ export class Game {
     }
   }
 
-  private renderPlatforms(ctx: CanvasRenderingContext2D): void {
-    for (const platform of this.room.platforms) {
-      if (platform.written) {
-        // Plateforme d'encre : trait plein, reflet, gouttes qui perlent
-        ctx.shadowColor = RENDERING.shadowColor;
-        ctx.shadowBlur = RENDERING.shadowBlur;
-        ctx.shadowOffsetY = RENDERING.shadowOffsetY;
-        ctx.fillStyle = PALETTE.ink;
-        ctx.beginPath();
-        ctx.roundRect(platform.x, platform.y, platform.width, platform.height, 6);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.25);
-        ctx.fillRect(platform.x + 5, platform.y + 2, platform.width - 10, 1.5);
-        const dripX = platform.x + (platform.objectId * 13) % Math.max(1, platform.width - 8) + 4;
-        ctx.fillStyle = PALETTE.ink;
-        ctx.beginPath();
-        ctx.ellipse(dripX, platform.y + platform.height + 2, 1.6, 3, 0, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // Emplacement « non-écrit » : lueur spectrale pulsante
-        const pulse = 0.45 + 0.25 * Math.sin(this.time * 2.5 + platform.objectId);
-        ctx.shadowColor = PALETTE.unwritten;
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = hexAlpha(PALETTE.unwritten, 0.14);
-        ctx.beginPath();
-        ctx.roundRect(platform.x, platform.y, platform.width, platform.height, 6);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = hexAlpha(PALETTE.unwritten, pulse + 0.3);
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([5, 4]);
-        ctx.lineDashOffset = -this.time * 8;
-        ctx.beginPath();
-        ctx.roundRect(platform.x + 0.5, platform.y + 0.5, platform.width - 1, platform.height - 1, 6);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+  private renderInk(ctx: CanvasRenderingContext2D): void {
+    const inkSlabs = this.room.inkSlabs();
+    ctx.shadowColor = RENDERING.shadowColor;
+    ctx.shadowBlur = RENDERING.shadowBlur;
+    ctx.shadowOffsetY = RENDERING.shadowOffsetY;
+    ctx.fillStyle = PALETTE.ink;
+    for (const slab of inkSlabs) this.roundedSlab(ctx, slab, 5);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    // Reflet clair sur la face supérieure de chaque dalle d'encre.
+    ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.22);
+    for (const slab of inkSlabs) {
+      ctx.fillRect(slab.x * TILE_SIZE + 4, slab.y * TILE_SIZE + 1.5, slab.w * TILE_SIZE - 8, 1.5);
     }
   }
 
@@ -651,7 +706,6 @@ export class Game {
       const def = typeof ability === 'string' ? getAbility(ability) : null;
       const cx = word.x + word.width / 2;
       const cy = word.y + word.height / 2 + Math.sin(this.time * 2.2) * 3;
-      // Halo
       ctx.fillStyle = hexAlpha(PALETTE.danger, 0.08 + 0.04 * Math.sin(this.time * 3));
       ctx.beginPath();
       ctx.arc(cx, cy - 3, 16, 0, Math.PI * 2);
@@ -667,18 +721,7 @@ export class Game {
 
     for (const fragment of this.room.objectsOfType('fragment')) {
       if (this.collectedObjects.has(fragment.id)) continue;
-      const cx = fragment.x + fragment.width / 2;
-      const cy = fragment.y + fragment.height / 2 + Math.sin(this.time * 1.8) * 2.5;
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(this.time * 0.8);
-      ctx.shadowColor = PALETTE.unwritten;
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = hexAlpha(PALETTE.unwritten, 0.9);
-      ctx.beginPath();
-      ctx.roundRect(-4.5, -4.5, 9, 9, 2);
-      ctx.fill();
-      ctx.restore();
+      this.renderFragment(ctx, fragment);
     }
 
     for (const inkwell of this.room.objectsOfType('inkwell')) {
@@ -689,7 +732,6 @@ export class Game {
       ctx.roundRect(inkwell.x - 1, inkwell.y + 7, inkwell.width + 2, inkwell.height - 7, 4);
       ctx.fill();
       ctx.shadowBlur = 0;
-      // Col et surface d'encre frémissante
       ctx.fillStyle = PALETTE.sepia;
       ctx.fillRect(inkwell.x + 2, inkwell.y + 2, inkwell.width - 4, 6);
       ctx.fillStyle = PALETTE.ink;
@@ -742,6 +784,55 @@ export class Game {
     }
   }
 
+  /** Fragment secret : contraste fort + halo pulsant + éclat, pour être bien visible. */
+  private renderFragment(ctx: CanvasRenderingContext2D, fragment: RoomObject): void {
+    const cx = fragment.x + fragment.width / 2;
+    const cy = fragment.y + fragment.height / 2 + Math.sin(this.time * 1.8) * 3;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 3);
+
+    // Halo lumineux
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, 20);
+    halo.addColorStop(0, hexAlpha(PALETTE.unwritten, 0.5));
+    halo.addColorStop(1, hexAlpha(PALETTE.unwritten, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Anneau pulsant
+    ctx.strokeStyle = hexAlpha(PALETTE.unwritten, 0.4 + pulse * 0.4);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 9 + pulse * 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cœur : losange d'encre (fort contraste sur le parchemin) liseré clair
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(this.time * 0.9);
+    ctx.shadowColor = PALETTE.unwritten;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = PALETTE.ink;
+    ctx.beginPath();
+    ctx.roundRect(-5, -5, 10, 10, 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = hexAlpha(PALETTE.unwritten, 0.9);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(-5, -5, 10, 10, 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Étincelle occasionnelle
+    if (Math.sin(this.time * 3) > 0.9) {
+      ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.9);
+      ctx.beginPath();
+      ctx.arc(cx + 5, cy - 6, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   private renderInteractHint(ctx: CanvasRenderingContext2D, obj: RoomObject): void {
     if (this.mode !== 'playing' || !this.playerOverlaps(obj, INTERACT_MARGIN)) return;
     const cx = obj.x + obj.width / 2;
@@ -759,7 +850,6 @@ export class Game {
   private renderPlayer(ctx: CanvasRenderingContext2D): void {
     const { body, facing, grounded } = this.player;
 
-    // Squash & stretch : étiré en chute/saut, écrasé à l'atterrissage
     let stretch = 1;
     if (!grounded) {
       stretch = 1 + Math.min(Math.abs(body.vy) / PHYSICS.maxFallSpeed, 1) * 0.16;
@@ -772,7 +862,6 @@ export class Game {
     const footX = body.x + body.w / 2;
     const footY = body.y + body.h;
 
-    // Ombre au sol
     if (grounded) {
       ctx.fillStyle = hexAlpha(PALETTE.ink, 0.15);
       ctx.beginPath();
@@ -780,7 +869,6 @@ export class Game {
       ctx.fill();
     }
 
-    // Silhouette d'encre
     ctx.shadowColor = RENDERING.shadowColor;
     ctx.shadowBlur = 4;
     ctx.fillStyle = PALETTE.ink;
@@ -789,7 +877,6 @@ export class Game {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // L'œil, côté regard
     ctx.fillStyle = PALETTE.parchment;
     ctx.beginPath();
     ctx.arc(footX + facing * w * 0.18, footY - h + 5.5, 1.4, 0, Math.PI * 2);
@@ -803,5 +890,37 @@ export class Game {
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** Curseur de tracé : anneau de portée autour du joueur + case sous la souris. */
+  private renderCursor(ctx: CanvasRenderingContext2D): void {
+    const cursor = this.cursor;
+    if (cursor === null || this.mode !== 'playing') return;
+    if (!hasAbility(this.unlocked, 'ecrire') || !this.pointer.inside) return;
+
+    // Anneau de portée (discret), visible surtout quand on trace/efface.
+    const active = this.pointer.drawing || this.pointer.erasing;
+    const center = this.playerCenter();
+    ctx.strokeStyle = active ? hexAlpha(PALETTE.ink, 0.14) : DRAW.reachRingColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 4]);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, INK.reach, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Case sous le curseur : couleur selon l'action possible.
+    let color: string;
+    if (this.pointer.erasing) {
+      color = this.room.hasInk(cursor.tx, cursor.ty) && cursor.inReach ? DRAW.cursorEraseColor : DRAW.cursorBlockedColor;
+    } else {
+      const paintable = this.room.isPaintable(cursor.tx, cursor.ty) && cursor.inReach && !this.tileOverlapsPlayer(cursor.tx, cursor.ty);
+      color = paintable ? DRAW.cursorPaintColor : DRAW.cursorBlockedColor;
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(cursor.tx * TILE_SIZE + 1, cursor.ty * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2, 3);
+    ctx.stroke();
   }
 }

@@ -85,6 +85,31 @@ native (devicePixelRatio), la vue reste en unités monde 480×270 (physique et
 level design inchangés), et les tuiles solides sont fusionnées en dalles
 arrondies par `mergeSolidTiles` (pure, testée) pour casser le look « damier ».
 
+### D10 — Encre tracée à la souris + difficulté par l'économie (2026-07-07)
+Décision du propriétaire après playtest : le pouvoir ÉCRIRE n'est plus une
+matérialisation de plateformes pré-placées (touche X), mais un **tracé libre à
+la souris** — le joueur dessine ses blocs d'encre (clic gauche) et les efface
+(clic droit) pour **récupérer** l'encre dépensée.
+
+Choix de conception (parmi 3 options soumises à l'humain) :
+- **Trait libre rastérisé sur la grille de tuiles** (pas de pentes) : conserve
+  la physique swept testée intacte ; les traits sont fusionnés en dalles
+  arrondies (rendu D9) donc lisses à l'écran. Alternatives écartées : rectangle
+  à glisser (moins organique), poutres à angle libre (imposait une nouvelle
+  collision segment/pente — nid à bugs, risque scope).
+- **Difficulté par l'encre, pas par l'adresse** : budget limité entre deux
+  encriers ; franchir les deux fosses dépasse le budget → il faut effacer le
+  premier pont pour financer le second (puzzle de récupération). Le délavage
+  (à sec, tracer coûte des PV) reste le filet punitif.
+- **Anti-softlock** : touche R = retour au dernier encrier + recharge. Bump
+  `SAVE_VERSION` v1→v2 (les vieilles saves pointaient vers l'ancienne géométrie).
+
+Détails techniques : `engine/pointer.ts` (état souris), `Renderer.screenToView`
+(écran→vue, la caméra fait vue→monde), `tilesBetween` (rastérisation d'un trait
+entre deux frames, pure + testée, garantie sans trou), couche d'encre mutable
+dans `world/room.ts`. Le mot ÉCRIRE et le level design (`gen_room_marge01.mjs`)
+ont été refaits autour de la mécanique. **Toujours zéro dépendance runtime.**
+
 ## Diagramme de dépendances (cible)
 
 ```

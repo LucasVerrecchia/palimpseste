@@ -5,7 +5,9 @@
  * physique des touches est identique en AZERTY et QWERTY.
  */
 
-export type Action = 'left' | 'right' | 'up' | 'down' | 'jump' | 'interact' | 'write' | 'erase';
+// Le tracé/effacement d'encre passe par la souris (voir engine/pointer.ts),
+// pas par une action clavier. 'respawn' renvoie au dernier encrier.
+export type Action = 'left' | 'right' | 'up' | 'down' | 'jump' | 'interact' | 'respawn';
 
 export type Bindings = Record<string, Action>;
 
@@ -20,8 +22,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   KeyS: 'down',
   Space: 'jump',
   KeyE: 'interact',
-  KeyX: 'write',
-  KeyC: 'erase',
+  KeyR: 'respawn',
 };
 
 export class Input {

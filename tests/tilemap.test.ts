@@ -132,32 +132,45 @@ describe('mergeSolidTiles — fusion des tuiles en dalles', () => {
   });
 });
 
-describe('salle marge_01 (données réelles du jeu)', () => {
+describe('salle marge_01 (données réelles du jeu, v2)', () => {
   const map = parseTiledMap(marge01);
 
   it('a les dimensions attendues et un contour fermé', () => {
-    expect(map.widthTiles).toBe(60);
+    expect(map.widthTiles).toBe(74);
     expect(map.heightTiles).toBe(17);
     // Fond de page plein
-    for (let tx = 0; tx < 60; tx++) expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
+    for (let tx = 0; tx < 74; tx++) expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
     // Marges gauche/droite pleines
     for (let ty = 0; ty < 17; ty++) {
       expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
-      expect(gidAt(map, 59, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, 73, ty)).toBeGreaterThan(0);
     }
   });
 
-  it('contient tous les objets requis par la Phase 1', () => {
+  it('contient les objets requis (et plus de plateformes pré-placées)', () => {
     const types = new Set(map.objects.map((o) => o.type));
-    for (const required of ['spawn', 'npc', 'word', 'unwritten', 'fragment', 'inkwell', 'exit']) {
+    for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'exit']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
+    // La mécanique de tracé souris remplace les plateformes non-écrites.
+    expect(types.has('unwritten')).toBe(false);
   });
 
-  it('la fosse est bien ouverte (chemin bas) avec sa marche de sortie', () => {
-    // Fosse : rangée 14 ouverte entre les colonnes 22 et 31
-    for (let tx = 22; tx <= 31; tx++) expect(gidAt(map, tx, 14)).toBe(0);
-    // Marche de sortie en (30, 15)
-    expect(gidAt(map, 30, 15)).toBeGreaterThan(0);
+  it('les deux fosses sont ouvertes et forcent le tracé (mur opposé trop haut)', () => {
+    // VOID A (cols 17-28) : entièrement ouverte au niveau du sol de départ.
+    for (let tx = 17; tx <= 28; tx++) expect(gidAt(map, tx, 14)).toBe(0);
+    // VOID B (cols 41-51) : ouverte.
+    for (let tx = 41; tx <= 51; tx++) expect(gidAt(map, tx, 14)).toBe(0);
+    // Île 1 (haute) : sa surface est en rangée 12, 32 px au-dessus du sol de départ
+    // (rangée 14) → infranchissable au saut depuis le fond, tracé obligatoire.
+    expect(gidAt(map, 29, 12)).toBeGreaterThan(0); // surface de l'île 1
+    expect(gidAt(map, 29, 13)).toBeGreaterThan(0); // île pleine (rows 12-15)
+    expect(gidAt(map, 29, 11)).toBe(0); // rien au-dessus de la surface
+  });
+
+  it('la corniche de sortie est haute (montée à tracer)', () => {
+    // Corniche cols 69-72 en rangée 5 (surface y=80), très au-dessus du palier (rangée 12).
+    for (let tx = 69; tx <= 72; tx++) expect(gidAt(map, tx, 5)).toBeGreaterThan(0);
+    expect(gidAt(map, 70, 11)).toBe(0); // vide sous la corniche → escalier d'encre
   });
 });

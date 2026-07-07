@@ -211,6 +211,12 @@ Tu es *le Dernier Mot* écrit avant l'arrêt de la Plume : un mot orphelin cherc
 ### Verbe central
 Réserve d'**encre** limitée. Deux gestes : **Écrire** (dépenser de l'encre pour rendre réel ce qui est non-écrit : plateformes, ponts, portes) et **Effacer/Raturer** (effacer le présent révèle le **brouillon d'en dessous**, qui transparaît — nouveaux passages, vérités cachées).
 
+> **MISE À JOUR 2026-07-07 (décision D10)** : ÉCRIRE se joue au **tracé libre à
+> la souris** (clic gauche pour dessiner ses blocs d'encre, clic droit pour les
+> effacer et récupérer l'encre). La difficulté vient du **budget d'encre** entre
+> deux encriers et du puzzle « effacer derrière soi pour réutiliser », pas de
+> sauts au pixel. Voir docs/architecture.md.
+
 ### Pouvoirs = mots retrouvés (progression / gating)
 | Mot | Effet | Rôle Metroidvania |
 |-----|-------|-------------------|

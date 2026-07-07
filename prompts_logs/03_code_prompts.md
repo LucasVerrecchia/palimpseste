@@ -38,3 +38,19 @@
   - Pivot DA (D9, docs/architecture.md) : `engine/renderer.ts` réécrit (canvas pleine fenêtre à résolution native + letterbox, vue 480×270 en unités monde), caméra à lissage exponentiel, suppression du module de scaling entier, `mergeSolidTiles` (fusion des tuiles en dalles, pure + testée), rendu modernisé de game.ts (texture papier procédurale, dalles arrondies ombrées, squash & stretch, particules d'encre, lueurs), HUD/toasts/boîte de dialogue en pilules arrondies. Spec §5 annotée, CLAUDE.md/README mis à jour.
 - **Modifications manuelles** : aucune ; décisions prises par l'humain via questions structurées.
 - **Décision d'intégration** : intégré après 49 tests + lint + build verts. Validation visuelle par l'humain attendue.
+
+## Session 4 — 2026-07-07 — Encre à la souris + refonte de la difficulté (D10)
+- **Contexte** : après validation visuelle (« ça va un peu mieux »), retours de playtest : (1) demande d'analyse de la difficulté du niveau et de le rendre plus dur ; (2) idée d'améliorer l'encre → tracer les blocs à la souris ; (3) le fragment à ramasser est invisible.
+- **Prompt (résumé)** : « es-tu capable de te rendre compte du rendu du niveau (difficulté, jouabilité) ? […] analyse-le et rends-le plus difficile. Le concept de l'encre peut être amélioré : tracer les blocs à la main (souris). Et le truc à ramasser sur la plateforme on ne le voit pas. » + consigne : « pour tout ce qui est narratif on en discutera, concentre-toi sur le technique ».
+- **Analyse fournie** (à partir des données, pas d'un rendu visuel — limite assumée) : hauteur de saut max ≈ 57 px, portée ≈ 76 px ; toutes les fosses = 32 px (marge 2-3×), encre jamais contraignante → niveau trivial. Fragment 9×9 px bleu pâle sur crème → invisible (diagnostic confirmé).
+- **Décisions humaines** (via questions structurées) : tracé = trait libre rastérisé sur la grille ; difficulté = budget + encre récupérable à l'effacement.
+- **Modèle & outil** : Claude Fable 5 (claude-fable-5) puis passage à Claude Opus 4.8 (claude-opus-4-8) en cours de session, via Claude Code.
+- **Output** :
+  - Mécanique : `engine/pointer.ts` (souris), `Renderer.screenToView` + interface `Viewport`, `tilesBetween` (rastérisation de trait, pure, sans trou), `reclaimInk` (remboursement), couche d'encre mutable dans `world/room.ts` (paint/erase/isPaintable/inkSlabs) remplaçant les plateformes pré-placées.
+  - `game/game.ts` : tracé/effacement à la souris avec portée limitée, délavage (à sec → PV, plancher 1 PV), respawn touche R au dernier encrier, rendu des dalles d'encre + curseur de tracé (case + anneau de portée).
+  - Niveau `gen_room_marge01.mjs` refait (74×17) : 2 fosses infranchissables au saut (tracé obligatoire), aucun encrier avant l'île 2 (force la récupération d'encre), montée finale à tracer, fragment secret tentant au-dessus de l'île 1.
+  - Fragment : rendu haute visibilité (halo radial, anneau pulsant, cœur d'encre contrasté, étincelle).
+  - `SAVE_VERSION` v2 (rejet des saves v1), `abilities.json` + dialogue mis à jour (contrôles souris), `index.html` (curseur croix).
+  - Tests : `draw.test.ts` (rastérisation, 4-adjacence), `room.test.ts` (couche d'encre), `reclaimInk` (ink.test), maj du test du niveau réel. Total 63 tests.
+- **Modifications manuelles** : aucune ; décisions par questions structurées.
+- **Décision d'intégration** : intégré après 63 tests + lint + build verts. `game.ts` (orchestration souris/canvas) non testable unitairement → validation par playtest humain attendue.

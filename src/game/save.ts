@@ -5,7 +5,10 @@
  */
 
 export const SAVE_KEY = 'palimpseste_save';
-export const SAVE_VERSION = 1;
+// v2 : refonte de la mécanique d'encre (tracé souris) + nouveau level design.
+// Les sauvegardes v1 pointent vers l'ancienne géométrie (playerPos pourrait
+// tomber dans un mur) : parseSave les rejette → nouvelle partie propre.
+export const SAVE_VERSION = 2;
 
 export interface SaveData {
   version: typeof SAVE_VERSION;

@@ -3,9 +3,9 @@
     {
       "id": "ecrire",
       "word": "ÉCRIRE",
-      "inkCost": 25,
-      "effect": "materialize_platform",
-      "description": "Dépense de l'encre pour rendre réel ce qui n'est pas écrit."
+      "inkCost": 4,
+      "effect": "draw_ink",
+      "description": "Trace des blocs d'encre à la souris (clic gauche) pour rendre réel ce qui n'est pas écrit ; le clic droit les efface et rend l'encre."
     }
   ]
 }

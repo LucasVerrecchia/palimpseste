@@ -23,19 +23,24 @@ npm run build     # type-check (tsc) + build production dans dist/
 npm run preview   # sert le build de production
 ```
 
-## Contrôles (remappables — `Input.rebind`)
-| Action | Touches |
+## Contrôles
+| Action | Entrée |
 |---|---|
 | Se déplacer | ← / → (ou Q/D — position physique A/D) |
 | Sauter | Espace (relâcher tôt = saut court) |
 | Interagir / parler / encrier | E |
-| Écrire (matérialiser une forme pâle) | X |
+| **Tracer de l'encre** | **Clic gauche maintenu** (dans la portée autour de toi) |
+| **Effacer l'encre (récupère l'encre)** | **Clic droit maintenu** |
+| Revenir au dernier encrier | R |
 | Naviguer dans les choix de dialogue | ↑ / ↓ puis E |
 
 Dans la salle « La Marge » : parle au PNJ, ramasse le mot **ÉCRIRE**, puis
-franchis la fosse par le haut (en écrivant les plateformes pâles, 25 d'encre
-chacune) ou par le bas (chemin alternatif). Une alcôve secrète en hauteur
-cache un fragment. L'encrier recharge l'encre et sauvegarde.
+**dessine tes propres ponts d'encre à la souris** pour franchir les deux vides.
+Le budget d'encre ne suffit pas pour les deux d'un coup : **efface ton premier
+pont (clic droit) pour récupérer l'encre** et financer le second. L'encrier
+recharge et fait office de point de retour (R). Un fragment secret, bien
+visible, se gagne en traçant un escalier vers le haut. À sec, tracer puise dans
+tes PV (le « délavage »).
 
 ## Documentation
 - `Palimpseste_SPEC.md` — spec complète et plan de build par phases

@@ -8,6 +8,9 @@ Voir Palimpseste_SPEC.md pour la spec complète.
 - TypeScript strict, Vite, Canvas 2D. ZÉRO dépendance runtime sans justif écrite.
 - Séparation engine/ (générique) vs game/ (Palimpseste). engine n'importe jamais game.
 - Data-driven : niveaux (Tiled JSON), dialogues, pouvoirs, flags = fichiers /src/data.
+- ÉCRIRE = tracé d'encre à la souris (clic gauche dessine, clic droit efface et
+  rembourse ; décision D10). Difficulté = budget d'encre + puzzle de récupération.
+  Contrôles : flèches/QD, Espace saut, E interagir, R retour encrier, souris tracer.
 - Boucle à pas de temps fixe. Logique métier en fonctions pures + tests Vitest.
 - Rendu VECTORIEL haute résolution « manuscrit moderne » (décision D9 du
   2026-07-06 — plus de pixel art). Vue en unités monde 480x270, tuiles 16x16

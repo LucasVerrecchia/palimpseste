@@ -42,13 +42,18 @@ export const PLAYER = {
   maxHealth: 100,
 } as const;
 
-/** Ressource d'encre. */
+/**
+ * Ressource d'encre. Le joueur trace des blocs d'encre à la souris (clic
+ * gauche) ; le clic droit les efface et rembourse l'encre. La difficulté vient
+ * du budget limité entre deux encriers + du puzzle « effacer pour réutiliser ».
+ */
 export const INK = {
-  max: 100,
+  max: 80,
+  /** Coût d'encre par tuile tracée (remboursé à l'identique à l'effacement). */
+  costPerTile: 4,
+  /** Portée max (px, centre joueur → centre tuile) pour tracer/effacer. */
+  reach: 96,
 } as const;
-
-/** Distance max (px, centre à centre) pour écrire une plateforme non-écrite. */
-export const WRITE_RANGE = 80;
 
 /** Marge (px) autour du joueur pour détecter les interactions (PNJ, encrier). */
 export const INTERACT_MARGIN = 10;
@@ -72,12 +77,21 @@ export const RENDERING = {
 
 /** Particules d'encre et ambiance. */
 export const PARTICLES = {
-  maxCount: 220,
+  maxCount: 260,
   ambientMotes: 18,
   jumpBurst: 6,
   landBurst: 8,
-  writeBurst: 18,
+  drawBurst: 2,
+  eraseBurst: 3,
   gravity: 260,
+} as const;
+
+/** Rendu du curseur de tracé et de la portée. */
+export const DRAW = {
+  reachRingColor: 'rgba(31, 27, 22, 0.05)',
+  cursorPaintColor: 'rgba(31, 27, 22, 0.55)',
+  cursorEraseColor: 'rgba(193, 54, 43, 0.6)',
+  cursorBlockedColor: 'rgba(193, 54, 43, 0.25)',
 } as const;
 
 /** Convertit une couleur hex de la palette en rgba avec alpha. */

@@ -176,3 +176,49 @@ export function mergeSolidTiles(
   }
   return rects;
 }
+
+/** Coordonnée de tuile entière. */
+export interface TileCoord {
+  x: number;
+  y: number;
+}
+
+/**
+ * Liste des tuiles traversées par un segment entre deux tuiles (rastérisation
+ * d'un trait de souris entre deux frames). Chaque tuile consécutive est
+ * 4-adjacente à la précédente : un trait en diagonale rapide ne laisse donc
+ * aucun « trou » (pas de pont troué). Fonction pure, testée.
+ */
+export function tilesBetween(x0: number, y0: number, x1: number, y1: number): TileCoord[] {
+  const tiles: TileCoord[] = [{ x: x0, y: y0 }];
+  let x = x0;
+  let y = y0;
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+
+  while (x !== x1 || y !== y1) {
+    const e2 = 2 * err;
+    if (e2 > -dy && e2 < dx) {
+      // Pas diagonal : on le décompose en deux pas orthogonaux (anti-trou).
+      err -= dy;
+      x += sx;
+      tiles.push({ x, y });
+      if (x === x1 && y === y1) break;
+      err += dx;
+      y += sy;
+      tiles.push({ x, y });
+    } else if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+      tiles.push({ x, y });
+    } else {
+      err += dx;
+      y += sy;
+      tiles.push({ x, y });
+    }
+  }
+  return tiles;
+}

@@ -35,3 +35,12 @@ export function spendInk(ink: InkState, cost: number): SpendResult {
 export function refillInk(ink: InkState): InkState {
   return { current: ink.max, max: ink.max };
 }
+
+/**
+ * Rembourse `amount` d'encre (effacement d'un bloc tracé), sans dépasser le max.
+ * Le délavage n'est PAS remboursé : on ne rend que de l'encre, jamais des PV.
+ */
+export function reclaimInk(ink: InkState, amount: number): InkState {
+  if (amount < 0) throw new Error('Remboursement d\'encre négatif');
+  return { current: Math.min(ink.max, ink.current + amount), max: ink.max };
+}

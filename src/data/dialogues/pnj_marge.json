@@ -9,7 +9,7 @@
     },
     "conseil": {
       "speaker": "PNJ de la Marge",
-      "text": "[TODO narration] Plus loin traîne un mot perdu : ÉCRIRE. Ramasse-le, puis appuie sur X près des formes pâles pour les rendre réelles.",
+      "text": "[TODO narration] Plus loin traîne un mot perdu : ÉCRIRE. Ramasse-le, puis trace ton encre au clic gauche pour franchir les vides — clic droit pour l'effacer et la reprendre.",
       "next": "question"
     },
     "question": {

@@ -74,4 +74,26 @@ export class Renderer {
   endFrame(): void {
     this.ctx.restore();
   }
+
+  /**
+   * Convertit une position écran (px CSS, ex. MouseEvent.clientX/Y) en
+   * coordonnées de vue (repère 480×270), en inversant la letterbox + l'échelle.
+   * Le devicePixelRatio n'intervient pas : clientX/Y et innerWidth/Height sont
+   * déjà en px CSS. Le jeu ajoute ensuite la position caméra pour obtenir le
+   * repère monde.
+   */
+  screenToView(clientX: number, clientY: number): { x: number; y: number } {
+    if (this.target === null) return { x: 0, y: 0 };
+    const screenW = this.target.innerWidth;
+    const screenH = this.target.innerHeight;
+    const scale = Math.min(screenW / this.viewWidth, screenH / this.viewHeight);
+    const offsetX = (screenW - this.viewWidth * scale) / 2;
+    const offsetY = (screenH - this.viewHeight * scale) / 2;
+    return { x: (clientX - offsetX) / scale, y: (clientY - offsetY) / scale };
+  }
+}
+
+/** Ce dont le jeu a besoin pour projeter la souris dans le monde. */
+export interface Viewport {
+  screenToView(clientX: number, clientY: number): { x: number; y: number };
 }

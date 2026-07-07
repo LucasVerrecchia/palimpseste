@@ -12,7 +12,8 @@ export interface GameEvents extends Record<string, unknown> {
   flag_set: { flag: string; value: boolean | number };
   room_entered: { roomId: string };
   game_saved: { roomId: string };
-  platform_written: { objectId: number };
+  ink_reclaimed: { amount: number };
+  player_respawned: { x: number; y: number };
 }
 
 export type GameEventBus = EventBus<GameEvents>;
