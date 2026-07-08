@@ -3,7 +3,14 @@
  * La couche d'encre est mutable (paint/erase à la souris) et vient s'ajouter
  * aux tuiles statiques pour la requête de solidité de la physique.
  */
-import { gidAt, mergeSolidTiles, type ParsedMap, type RoomObject, type TileRect } from '../../engine/tilemap';
+import {
+  gidAt,
+  mergeSolidTiles,
+  type ParsedMap,
+  type RoomObject,
+  type TileCoord,
+  type TileRect,
+} from '../../engine/tilemap';
 import type { SolidQuery } from '../../engine/physics';
 import { TILE_SIZE } from '../config';
 
@@ -16,6 +23,12 @@ export class Room {
   readonly map: ParsedMap;
   /** Tuiles d'encre tracées par le joueur, clés "tx,ty". */
   private readonly ink = new Set<string>();
+  /**
+   * Barrières « canon » : tuiles du décor narratif imposé par l'Auteur,
+   * solides tant qu'on ne les a pas RATURÉES (la phrase du chapitre). Clés
+   * "tx,ty" → id de l'objet-canon, pour pouvoir effacer un mot d'un bloc.
+   */
+  private readonly canon = new Map<string, number>();
 
   constructor(id: string, map: ParsedMap) {
     this.id = id;
@@ -43,6 +56,35 @@ export class Room {
     return gidAt(this.map, tileX, tileY) > 0;
   }
 
+  // ---------- Barrières canon (mots-loi solides et effaçables) ----------
+
+  /** Marque les tuiles d'un mot-loi comme barrière solide (au chargement). */
+  registerCanonBarrier(objectId: number, tiles: readonly TileCoord[]): void {
+    for (const tile of tiles) this.canon.set(key(tile.x, tile.y), objectId);
+  }
+
+  /** Y a-t-il une barrière canon (non raturée) sur cette tuile ? */
+  hasCanon(tileX: number, tileY: number): boolean {
+    return this.canon.has(key(tileX, tileY));
+  }
+
+  /** Id du mot-loi couvrant cette tuile, ou null (pour cibler une rature). */
+  canonAt(tileX: number, tileY: number): number | null {
+    return this.canon.get(key(tileX, tileY)) ?? null;
+  }
+
+  /** Rature un mot-loi entier : ses tuiles cessent d'être solides. */
+  eraseCanon(objectId: number): void {
+    for (const [k, ownerId] of this.canon) {
+      if (ownerId === objectId) this.canon.delete(k);
+    }
+  }
+
+  /** Dalles canon fusionnées (rendu du décor imposé encore en place). */
+  canonSlabs(): TileRect[] {
+    return mergeSolidTiles(this.map.widthTiles, this.map.heightTiles, (x, y) => this.hasCanon(x, y));
+  }
+
   /** Y a-t-il de l'encre tracée par le joueur en (tileX, tileY) ? */
   hasInk(tileX: number, tileY: number): boolean {
     return this.ink.has(key(tileX, tileY));
@@ -57,7 +99,7 @@ export class Room {
     if (tileX < 0 || tileX >= this.map.widthTiles || tileY < 0 || tileY >= this.map.heightTiles) {
       return false;
     }
-    return !this.isNaturalSolid(tileX, tileY) && !this.hasInk(tileX, tileY);
+    return !this.isNaturalSolid(tileX, tileY) && !this.hasInk(tileX, tileY) && !this.hasCanon(tileX, tileY);
   }
 
   paintInk(tileX: number, tileY: number): void {
@@ -81,6 +123,6 @@ export class Room {
     if (tx < 0 || tx >= this.map.widthTiles) return true;
     if (ty >= this.map.heightTiles) return true;
     if (ty < 0) return false;
-    return this.isNaturalSolid(tx, ty) || this.hasInk(tx, ty);
+    return this.isNaturalSolid(tx, ty) || this.hasInk(tx, ty) || this.hasCanon(tx, ty);
   };
 }

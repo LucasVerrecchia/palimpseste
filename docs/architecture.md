@@ -110,6 +110,50 @@ entre deux frames, pure + testée, garantie sans trou), couche d'encre mutable
 dans `world/room.ts`. Le mot ÉCRIRE et le level design (`gen_room_marge01.mjs`)
 ont été refaits autour de la mécanique. **Toujours zéro dépendance runtime.**
 
+### D11 — La « déviation » : phrase-loi gravée dans le niveau (2026-07-08)
+Décision de game design avec le propriétaire pour donner un **objectif narratif**
+au chapitre 1. Concept : chaque chapitre porte **une phrase-loi** (la prose du
+livre) gravée dans le décor. Elle décrit ce qui est *censé* arriver ; le joueur
+la **dévie** avec les deux gestes qu'il connaît déjà — aucun nouveau verbe :
+- **Raturer** un mot-loi (clic droit sur une barrière-canon) → penchant RATURE ;
+- **Combler** un blanc ▢ d'encre (clic gauche) → penchant POINT FINAL.
+
+Chapitre 1 « La Marge » — phrase de base : *« Le mot resta enfermé dans la marge,
+et n'en sortit jamais. »* **Les obstacles SONT les mots de la phrase** (retour de
+playtest : le tracé de plateformes génériques ne rendait pas le lien « écrire =
+changer l'histoire ») :
+- dès le départ, le mot-cage **« enfermé »** barre le couloir → le raturer est le
+  premier geste concret « j'édite le texte, donc le monde change » (neutre) ;
+- au choix final : raturer **« jamais »** (barrage bas) → RATURE ; ou combler le
+  blanc **▢** d'encre (passerelle haute) → POINT FINAL. Chaque geste final nourrit
+  `endingLeaning` (le scalaire des vraies fins, Phase 3). Deux sorties.
+
+La phrase-loi (bandeau haut) **se recompose en une phrase entière et cohérente**
+selon les choix, au lieu de rayer des mots isolément (grammaire cassée). Écrire
+« toi » change le sujet impersonnel « Le mot » en « Tu » ; raturer « jamais »
+inverse la fatalité. Résolveur pur `resolveSentence(variants, flags)` : la
+variante satisfaite la plus spécifique gagne.
+
+Choix de conception (parmi 3 options soumises à l'humain, option « phrase gravée
+dans le décor » retenue — vs « narrateur qui commente » vs les deux) : le plus
+diégétique et le plus réutilisable. Implémentation **data-driven & pure** :
+- objets Tiled de type `canon` (`mode: barrier|latent`, `flag`, `leaning?`,
+  `text`) → aucune logique de chapitre en dur ; `leaning` omis = geste neutre ;
+- `game/narrative/deviation.ts` : fonctions pures testées (`objectTiles`,
+  `isBlankFilled`, `applyLeaning`, `resolveSentence`) ;
+- barrières solides et effaçables gérées dans `world/room.ts` (`registerCanonBarrier`
+  / `eraseCanon`), en plus des tuiles naturelles et de l'encre du joueur ;
+- variantes de phrase décrites dans `data/chapters/marge_01.json` ([proposition]).
+
+Level design refait autour du choix (`gen_room_marge01.mjs`, 64×17) : plus de
+murs abstraits — PNJ → ÉCRIRE → mot-cage « enfermé » (à raturer) → encrier →
+choix (« jamais » en bas / ▢ sur passerelle haute) → 2 sorties.
+
+Notes associées : `SAVE_VERSION` v3 (rejet des saves v2 obsolètes) ; `AUTO_RESUME`
+(config) désactive la reprise auto au démarrage pendant le dev (repart au spawn) ;
+boîte de dialogue à **hauteur calculée** (les choix ne chevauchent plus la
+réplique). **Toujours zéro dépendance runtime.**
+
 ## Diagramme de dépendances (cible)
 
 ```

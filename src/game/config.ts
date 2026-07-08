@@ -58,6 +58,16 @@ export const INK = {
 /** Marge (px) autour du joueur pour détecter les interactions (PNJ, encrier). */
 export const INTERACT_MARGIN = 10;
 
+/**
+ * Reprendre la sauvegarde au démarrage ? `false` pendant le développement :
+ * relancer le jeu repart proprement du début du chapitre (au spawn), au lieu
+ * de réapparaître au dernier encrier. L'encrier reste un checkpoint en cours de
+ * partie (touche R) et le système de save continue d'écrire — on rebranchera la
+ * reprise via un menu « Continuer » plus tard. Typé `boolean` volontairement
+ * (et non littéral) pour rester un vrai interrupteur.
+ */
+export const AUTO_RESUME: boolean = false;
+
 /** Durée d'affichage des messages éphémères (secondes). */
 export const TOAST_SECONDS = 3;
 

@@ -1,40 +1,56 @@
 {
   "id": "pnj_marge",
   "start": "intro",
+  "_comment": "[proposition narration — à valider avec Lucas]. Le PNJ pose la règle du chapitre : la phrase gravée dit que tu ne sortiras JAMAIS ; à toi de la dévier (raturer 'jamais' OU compléter le blanc de ton nom).",
   "nodes": {
     "intro": {
-      "speaker": "PNJ de la Marge",
-      "text": "[TODO narration — texte placeholder] Tu es réveillé, petit mot ? La page s'effrite, par ici.",
-      "next": "conseil"
+      "speaker": "Le Signet",
+      "text": "Réveillé, petit mot ? Tu n'as pas de chance : tu es tombé dans la marge, là où la page s'effrite.",
+      "next": "regle"
     },
-    "conseil": {
-      "speaker": "PNJ de la Marge",
-      "text": "[TODO narration] Plus loin traîne un mot perdu : ÉCRIRE. Ramasse-le, puis trace ton encre au clic gauche pour franchir les vides — clic droit pour l'effacer et la reprendre.",
-      "next": "question"
+    "regle": {
+      "speaker": "Le Signet",
+      "text": "Lève les yeux. La première phrase du livre est gravée là-haut. Elle te dit « enfermé », puis « jamais sorti ». Et ce qui est écrit... arrive.",
+      "next": "espoir"
     },
-    "question": {
-      "speaker": "PNJ de la Marge",
-      "text": "[TODO narration] Et toi, que feras-tu de ce brouillon de monde ?",
+    "espoir": {
+      "speaker": "Le Signet",
+      "text": "Mais tu tiens une plume. Ramasse le mot ÉCRIRE, va jusqu'au mot « enfermé » qui te barre la route, et RATURE-le (clic droit). Tu verras : effacer un mot, c'est changer ce qui arrive.",
+      "next": "choix"
+    },
+    "choix": {
+      "speaker": "Le Signet",
+      "text": "Deux façons de tromper la phrase, tout au bout : rature le mot « jamais »... ou comble le blanc resté après « Le mot », et écris-toi une sortie. Que préfères-tu ?",
       "choices": [
         {
-          "text": "[TODO] L'achever.",
-          "next": "fin_achever",
-          "effects": [{ "type": "set_flag", "flag": "intention_achever", "value": true }]
+          "text": "Raturer ce qui m'enferme.",
+          "next": "fin_rature",
+          "effects": [{ "type": "set_flag", "flag": "intention_rature", "value": true }]
         },
         {
-          "text": "[TODO] Je ne sais pas encore.",
+          "text": "Me compléter, m'achever.",
+          "next": "fin_point",
+          "effects": [{ "type": "set_flag", "flag": "intention_point", "value": true }]
+        },
+        {
+          "text": "Je verrai bien.",
           "next": "fin_doute"
         }
       ]
     },
-    "fin_achever": {
-      "speaker": "PNJ de la Marge",
-      "text": "[TODO narration] Vaste programme, pour un si petit mot. Va.",
+    "fin_rature": {
+      "speaker": "Le Signet",
+      "text": "Effacer l'Auteur... c'est une liberté qui laisse un vide. Va, petit mot.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
+    },
+    "fin_point": {
+      "speaker": "Le Signet",
+      "text": "Te finir toi-même pour finir l'histoire... c'est noble, et sans retour. Va.",
       "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
     },
     "fin_doute": {
-      "speaker": "PNJ de la Marge",
-      "text": "[TODO narration] Les brouillons sont faits pour hésiter. Va, et reviens me lire.",
+      "speaker": "Le Signet",
+      "text": "Les brouillons ont le droit d'hésiter. Va, et reviens me lire.",
       "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
     }
   }

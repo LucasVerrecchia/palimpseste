@@ -26,6 +26,7 @@ import {
   type TileRect,
 } from '../engine/tilemap';
 import {
+  AUTO_RESUME,
   DRAW,
   hexAlpha,
   INK,
@@ -57,10 +58,37 @@ import { parseSave, SAVE_KEY, SAVE_VERSION, type SaveData } from './save';
 import { drawDialogueBox } from './ui/dialogue_box';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
 import { Room } from './world/room';
+import {
+  applyLeaning,
+  isBlankFilled,
+  objectTiles,
+  resolveSentence,
+  type SentenceVariant,
+} from './narrative/deviation';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
+import chapterMarge01 from '../data/chapters/marge_01.json';
 
 const ROOM_ID = 'marge_01';
+
+/** Lecture défensive des variantes de phrase (import JSON → type sûr). */
+function parseSentenceVariants(raw: readonly unknown[]): SentenceVariant[] {
+  const variants: SentenceVariant[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const obj = entry as Record<string, unknown>;
+    if (typeof obj['text'] !== 'string') continue;
+    const when: Record<string, boolean> = {};
+    const rawWhen = obj['when'];
+    if (typeof rawWhen === 'object' && rawWhen !== null) {
+      for (const [flag, value] of Object.entries(rawWhen as Record<string, unknown>)) {
+        if (typeof value === 'boolean') when[flag] = value;
+      }
+    }
+    variants.push({ when, text: obj['text'] });
+  }
+  return variants;
+}
 
 type Mode = 'playing' | 'dialogue';
 
@@ -109,6 +137,12 @@ export class Game {
   /** Dalles de décor précalculées (tuiles statiques fusionnées). */
   private readonly slabs: TileRect[];
   private readonly paper: HTMLCanvasElement;
+  /** Mots-loi solides à raturer (clic droit) → déviation RATURE. */
+  private readonly canonBarriers: RoomObject[];
+  /** Blancs ▢ à combler d'encre → déviation POINT FINAL. */
+  private readonly canonBlanks: RoomObject[];
+  /** Variantes de la phrase-loi : le bandeau en affiche la plus spécifique. */
+  private readonly sentenceVariants = parseSentenceVariants(chapterMarge01.sentenceVariants);
 
   private player: PlayerState;
   private ink: InkState;
@@ -151,6 +185,14 @@ export class Game {
       (tx, ty) => gidAt(this.room.map, tx, ty) > 0,
     );
     this.paper = this.createPaperTexture();
+
+    // Mots-loi : les barrières deviennent solides ; les blancs restent à combler.
+    this.canonBarriers = this.room.objectsOfType('canon').filter((o) => o.properties['mode'] === 'barrier');
+    this.canonBlanks = this.room.objectsOfType('canon').filter((o) => o.properties['mode'] === 'latent');
+    for (const barrier of this.canonBarriers) {
+      this.room.registerCanonBarrier(barrier.id, objectTiles(barrier));
+    }
+
     this.spawnMotes();
 
     this.ink = createInk(INK.max);
@@ -158,7 +200,7 @@ export class Game {
     this.checkpoint = { x: this.player.body.x, y: this.player.body.y };
 
     this.wireToasts();
-    this.restoreFromSave();
+    if (AUTO_RESUME) this.restoreFromSave();
 
     this.visitedRooms.add(ROOM_ID);
     this.bus.emit('room_entered', { roomId: ROOM_ID });
@@ -273,6 +315,22 @@ export class Game {
         this.collectedObjects.add(word.id);
       }
     }
+    // Rejouer les déviations déjà faites (l'encre tracée n'est pas persistée :
+    // on rature à nouveau les barrières et on reforme les ponts des blancs).
+    for (const barrier of this.canonBarriers) {
+      const flag = barrier.properties['flag'];
+      if (typeof flag === 'string' && this.storyFlags[flag] === true) {
+        this.room.eraseCanon(barrier.id);
+        this.collectedObjects.add(barrier.id);
+      }
+    }
+    for (const blank of this.canonBlanks) {
+      const flag = blank.properties['flag'];
+      if (typeof flag === 'string' && this.storyFlags[flag] === true) {
+        for (const tile of objectTiles(blank)) this.room.paintInk(tile.x, tile.y);
+        this.collectedObjects.add(blank.id);
+      }
+    }
     this.toast('Le manuscrit se souvient de toi.');
   }
 
@@ -337,6 +395,7 @@ export class Game {
     if (this.input.wasPressed('interact')) this.handleInteract();
     if (this.input.wasPressed('respawn')) this.respawn();
     this.updateCursorAndDrawing();
+    this.checkBlanks();
     this.checkExit();
 
     const center = this.playerCenter();
@@ -454,9 +513,67 @@ export class Game {
     }
 
     if (this.pointer.erasing) {
+      this.tryRatureCanon(tx, ty);
       this.strokeErase(tx, ty);
     } else {
       this.lastErase = null;
+    }
+  }
+
+  /** Rature un mot-loi solide (déviation RATURE) si le curseur est dessus et à portée. */
+  private tryRatureCanon(tx: number, ty: number): void {
+    const objectId = this.room.canonAt(tx, ty);
+    if (objectId === null) return;
+    const barrier = this.canonBarriers.find((o) => o.id === objectId);
+    if (barrier === undefined || this.collectedObjects.has(barrier.id)) return;
+    if (!this.tileInReach(tx, ty)) {
+      if (this.toastCooldown <= 0) {
+        this.toast('Trop loin pour raturer — approche-toi du mot.');
+        this.toastCooldown = 1.4;
+      }
+      return;
+    }
+    this.collectedObjects.add(barrier.id);
+    this.room.eraseCanon(barrier.id);
+    this.applyDeviation(barrier);
+    const text = barrier.properties['text'];
+    this.bus.emit('canon_erased', {
+      objectId: barrier.id,
+      flag: typeof barrier.properties['flag'] === 'string' ? barrier.properties['flag'] : '',
+    });
+    for (const tile of objectTiles(barrier)) {
+      this.burst(tile.x * TILE_SIZE + 8, tile.y * TILE_SIZE + 8, 3, PALETTE.danger, 45);
+    }
+    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » — le mot n'a plus de prise sur toi.`);
+  }
+
+  /** Un blanc ▢ entièrement recouvert d'encre complète la phrase (déviation POINT FINAL). */
+  private checkBlanks(): void {
+    for (const blank of this.canonBlanks) {
+      if (this.collectedObjects.has(blank.id)) continue;
+      if (!isBlankFilled(objectTiles(blank), (x, y) => this.room.hasInk(x, y))) continue;
+      this.collectedObjects.add(blank.id);
+      this.applyDeviation(blank);
+      const reveal = blank.properties['text'];
+      this.bus.emit('canon_completed', {
+        objectId: blank.id,
+        flag: typeof blank.properties['flag'] === 'string' ? blank.properties['flag'] : '',
+      });
+      this.burst(blank.x + blank.width / 2, blank.y + blank.height / 2, 14, PALETTE.unwritten, 50);
+      this.toast(`Tu t'écris dans la phrase — le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».`);
+    }
+  }
+
+  /** Pose le flag et le penchant de fin d'une déviation (une seule fois). */
+  private applyDeviation(obj: RoomObject): void {
+    const flag = obj.properties['flag'];
+    if (typeof flag === 'string') {
+      this.storyFlags[flag] = true;
+      this.bus.emit('flag_set', { flag, value: true });
+    }
+    const leaning = obj.properties['leaning'];
+    if (typeof leaning === 'number') {
+      this.endingLeaning = applyLeaning(this.endingLeaning, leaning);
     }
   }
 
@@ -598,9 +715,17 @@ export class Game {
   private checkExit(): void {
     if (this.exitReached) return;
     const exit = this.room.objectsOfType('exit').find((o) => this.playerOverlaps(o));
-    if (exit !== undefined) {
-      this.exitReached = true;
-      this.toast('Fin du prototype — la Marge continue en Phase 2.');
+    if (exit === undefined) return;
+    this.exitReached = true;
+    const ending = exit.properties['ending'];
+    const kind = typeof ending === 'string' ? ending : 'point';
+    this.storyFlags['chapitre1_fini'] = true;
+    this.bus.emit('chapter_ended', { ending: kind });
+    this.persist();
+    if (kind === 'rature') {
+      this.toast('Tu quittes la Marge en la raturant. Un vide s\'ouvre — la suite en Phase 2.');
+    } else {
+      this.toast('Tu quittes la Marge en t\'y écrivant. La phrase s\'achève — la suite en Phase 2.');
     }
   }
 
@@ -618,6 +743,7 @@ export class Game {
     this.renderMotes(ctx);
     this.renderSlabs(ctx);
     this.renderInk(ctx);
+    this.renderCanon(ctx);
     this.renderObjects(ctx);
     this.renderPlayer(ctx);
     this.renderParticles(ctx);
@@ -625,6 +751,7 @@ export class Game {
 
     ctx.restore();
 
+    this.drawSentenceBanner(ctx);
     drawHud(
       ctx,
       this.ink,
@@ -697,6 +824,106 @@ export class Game {
     for (const slab of inkSlabs) {
       ctx.fillRect(slab.x * TILE_SIZE + 4, slab.y * TILE_SIZE + 1.5, slab.w * TILE_SIZE - 8, 1.5);
     }
+  }
+
+  /** Mots-loi : barrières solides (à raturer) et blancs ▢ (à combler). */
+  private renderCanon(ctx: CanvasRenderingContext2D): void {
+    // Barrières encore en place : dalle d'encre sépia « gravée » + le mot.
+    for (const barrier of this.canonBarriers) {
+      if (this.collectedObjects.has(barrier.id)) continue;
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
+      ctx.shadowOffsetY = RENDERING.shadowOffsetY;
+      ctx.fillStyle = PALETTE.sepia;
+      ctx.beginPath();
+      ctx.roundRect(barrier.x, barrier.y, barrier.width, barrier.height, 3);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      // Le mot gravé, en travers de la barrière.
+      const text = barrier.properties['text'];
+      if (typeof text === 'string') {
+        ctx.save();
+        ctx.translate(barrier.x + barrier.width / 2, barrier.y + barrier.height / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.85);
+        ctx.font = 'italic bold 13px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+        ctx.textBaseline = 'alphabetic';
+      }
+      this.renderCanonHint(ctx, barrier, 'clic droit : raturer');
+    }
+
+    // Blancs ▢ non comblés : cadre pointillé pulsant, invite à écrire dedans.
+    for (const blank of this.canonBlanks) {
+      if (this.collectedObjects.has(blank.id)) continue;
+      const pulse = 0.5 + 0.5 * Math.sin(this.time * 3);
+      ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.4 + pulse * 0.4);
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.roundRect(blank.x + 1, blank.y + 1, blank.width - 2, blank.height - 2, 3);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = hexAlpha(PALETTE.danger, 0.5 + pulse * 0.3);
+      ctx.font = 'bold 11px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('▢', blank.x + blank.width / 2, blank.y + blank.height / 2);
+      ctx.textBaseline = 'alphabetic';
+      this.renderCanonHint(ctx, blank, 'trace ton encre ici');
+    }
+  }
+
+  /** Étiquette d'action au-dessus d'un mot-loi, seulement quand il est à portée. */
+  private renderCanonHint(ctx: CanvasRenderingContext2D, obj: RoomObject, label: string): void {
+    if (this.mode !== 'playing' || !hasAbility(this.unlocked, 'ecrire')) return;
+    const center = this.playerCenter();
+    const cx = obj.x + obj.width / 2;
+    const cy = obj.y + obj.height / 2;
+    if (Math.hypot(cx - center.x, cy - center.y) > INK.reach + TILE_SIZE) return;
+
+    ctx.font = 'italic 8px Georgia, serif';
+    ctx.textAlign = 'center';
+    const w = ctx.measureText(label).width + 10;
+    const y = obj.y - 6 + Math.sin(this.time * 4) * 1.2;
+    ctx.fillStyle = hexAlpha(PALETTE.ink, 0.85);
+    ctx.beginPath();
+    ctx.roundRect(cx - w / 2, y - 9, w, 12, 6);
+    ctx.fill();
+    ctx.fillStyle = PALETTE.parchment;
+    ctx.fillText(label, cx, y);
+  }
+
+  /**
+   * Bandeau de la phrase-loi (haut de l'écran). Au lieu de rayer des mots isolés
+   * (grammaire cassée), on affiche une phrase ENTIÈRE recomposée selon l'état de
+   * l'histoire — chaque choix produit une ligne cohérente qui montre le choix.
+   * Le texte s'assombrit une fois que le joueur a commencé à réécrire.
+   */
+  private drawSentenceBanner(ctx: CanvasRenderingContext2D): void {
+    const text = resolveSentence(this.sentenceVariants, this.storyFlags);
+    if (text === '') return;
+    const rewritten =
+      this.storyFlags['nom_ecrit'] === true || this.storyFlags['rature_jamais'] === true;
+
+    ctx.font = 'italic 11px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const width = ctx.measureText(text).width;
+    const cx = INTERNAL_WIDTH / 2;
+    const y = 20;
+
+    ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.55);
+    ctx.beginPath();
+    ctx.roundRect(cx - width / 2 - 8, y - 12, width + 16, 18, 9);
+    ctx.fill();
+
+    ctx.fillStyle = rewritten ? PALETTE.ink : hexAlpha(PALETTE.sepia, 0.9);
+    ctx.fillText(text, cx, y);
   }
 
   private renderObjects(ctx: CanvasRenderingContext2D): void {
@@ -912,7 +1139,8 @@ export class Game {
     // Case sous le curseur : couleur selon l'action possible.
     let color: string;
     if (this.pointer.erasing) {
-      color = this.room.hasInk(cursor.tx, cursor.ty) && cursor.inReach ? DRAW.cursorEraseColor : DRAW.cursorBlockedColor;
+      const erasable = this.room.hasInk(cursor.tx, cursor.ty) || this.room.canonAt(cursor.tx, cursor.ty) !== null;
+      color = erasable && cursor.inReach ? DRAW.cursorEraseColor : DRAW.cursorBlockedColor;
     } else {
       const paintable = this.room.isPaintable(cursor.tx, cursor.ty) && cursor.inReach && !this.tileOverlapsPlayer(cursor.tx, cursor.ty);
       color = paintable ? DRAW.cursorPaintColor : DRAW.cursorBlockedColor;

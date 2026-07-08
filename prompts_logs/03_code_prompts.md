@@ -54,3 +54,37 @@
   - Tests : `draw.test.ts` (rastérisation, 4-adjacence), `room.test.ts` (couche d'encre), `reclaimInk` (ink.test), maj du test du niveau réel. Total 63 tests.
 - **Modifications manuelles** : aucune ; décisions par questions structurées.
 - **Décision d'intégration** : intégré après 63 tests + lint + build verts. `game.ts` (orchestration souris/canvas) non testable unitairement → validation par playtest humain attendue.
+
+## Session 5 — 2026-07-08 — Narration & objectif du chapitre 1 : la « déviation » (D11)
+- **Contexte** : après validation de la mécanique d'encre, passage au game design narratif. Concept posé avec l'humain : un personnage coincé dans un livre qui doit « écrire son chemin » ; chaque chapitre = une trame prévue que le joueur peut **dévier**.
+- **Prompt (résumé)** : « on va peaufiner le jeu, surtout le niveau, les objectifs et la narration […] chaque niveau est un chapitre censé se dérouler d'une certaine manière, mais notre personnage peut dévier cette histoire ». Puis : « essayons de faire le niveau 1 complet et fini ».
+- **Modèle & outil** : Claude Opus 4.8 (claude-opus-4-8) via Claude Code (extension VS Code).
+- **Décisions humaines** (via question structurée) : incarnation de la déviation = **« phrase-loi gravée dans le décor »** (vs narrateur qui commente vs les deux). Le contenu narratif (phrase, PNJ) reste [proposition] à valider.
+- **Output** :
+  - Décision **D11** documentée (docs/architecture.md) : phrase-loi gravée, déviée en raturant un mot-loi (RATURE) ou en comblant un blanc ▢ (POINT FINAL), nourrit `endingLeaning`.
+  - `game/narrative/deviation.ts` : logique pure testée (`objectTiles`, `isBlankFilled`, `applyLeaning`).
+  - `world/room.ts` : barrières « canon » solides et effaçables (`registerCanonBarrier`/`eraseCanon`/`canonAt`), intégrées à `isSolid`/`isPaintable`.
+  - `game/game.ts` : rature d'un mot-loi au clic droit, détection du blanc comblé, application flag+penchant, 2 sorties (fins en miniature), rendu des mots-loi + **bandeau de phrase-loi réactif** (mot rayé / blanc rempli), curseur signalant le raturable.
+  - Data : `data/chapters/marge_01.json` (phrase réactive, data-driven), `dialogues/pnj_marge.json` réécrit ([proposition] « Le Signet » pose la règle et le choix), objets Tiled `canon` (barrier/latent) + 2 `exit` (ending rature/point).
+  - Niveau `gen_room_marge01.mjs` refait (64×17) : tuto ÉCRIRE (2 ressauts) → PNJ avant le pouvoir → encrier → zone du choix (barrière « jamais » en bas / blanc ▢ sur passerelle haute) → 2 sorties. Fragment secret conservé.
+  - `events.ts` : `canon_erased`, `canon_completed`, `chapter_ended`.
+  - Tests : `deviation.test.ts` (nouveau) + maj du test du niveau réel (géométrie v3). Total 71 tests.
+- **Modifications manuelles** : aucune ; décision de déviation prise par question structurée. Textes narratifs marqués [proposition] pour validation.
+- **Décision d'intégration** : intégré après typecheck + 71 tests + lint + build verts, et vérif géométrie (rendu ASCII) + intégrité du dialogue. Playtest humain du chapitre 1 attendu avant Phase 2.
+
+## Session 6 — 2026-07-08 — Playtest chapitre 1 : concrétisation & polish
+- **Contexte** : playtests successifs du chapitre 1 par l'humain, trois retours.
+- **Prompts (résumés)** :
+  1. « le personnage arrive au mauvais endroit (tout à droite)… les checkpoints persistent après avoir quitté ».
+  2. « je comprends pas trop la matérialisation de notre idée : on marche sur des plateformes, c'est pas assez concret le "si tu écris là tu changes le cours des choses" ».
+  3. « le sens est bancal : compléter donne "Le mot toi resta… et n'en sortit" qui ne veut rien dire. Il faut que la phrase ait toujours du sens et montre le choix. Et la bulle de dialogue chevauche le texte du PNJ au moment de choisir. »
+- **Modèle & outil** : Claude Opus 4.8 (claude-opus-4-8) via Claude Code.
+- **Décisions humaines** : reprise auto au démarrage = OFF pendant le dev ; matérialisation = « les obstacles sont les mots de la phrase » ; sens = recomposer une phrase entière selon les choix (option b, proposée puis validée).
+- **Output** :
+  - **Bug spawn** : `SAVE_VERSION` v2→v3 (rejet des saves obsolètes) + `AUTO_RESUME=false` (config) : le jeu ne reprend plus la save au démarrage, il repart au spawn (l'encrier reste un checkpoint en cours de partie via R ; save toujours écrite pour un futur menu « Continuer »).
+  - **Concrétisation** : suppression des murs abstraits ; ajout du mot-cage **« enfermé »** (barrière-canon neutre) qui barre le couloir dès le départ → 1er geste = te libérer en le raturant. Le level design (`gen_room_marge01.mjs`) fait des mots-loi les seuls obstacles. Étiquettes d'action au-dessus des mots-loi à portée.
+  - **Sens de la phrase** : `resolveSentence(variants, flags)` (pur, testé) recompose une **phrase entière et cohérente** selon les choix, au lieu de rayer des mots ; variantes data-driven dans `data/chapters/marge_01.json` ([proposition]). Écrire « toi » change « Le mot » → « Tu » ; raturer « jamais » inverse la fatalité.
+  - **Bulle de dialogue** : `ui/dialogue_box.ts` réécrit à **hauteur calculée** (en-tête + lignes + choix) → les réponses ne chevauchent plus la réplique.
+  - Tests : `resolveSentence` (4 cas) ajoutés → 75 tests. D11 (docs/architecture.md), CLAUDE.md et README d'état mis à jour.
+- **Modifications manuelles** : aucune ; décisions par échanges structurés. Textes narratifs marqués [proposition].
+- **Décision d'intégration** : intégré après typecheck + 75 tests + lint + build verts, et vérif de la recomposition de phrase pour les 5 états. Playtest de confirmation attendu.

@@ -14,6 +14,12 @@ export interface GameEvents extends Record<string, unknown> {
   game_saved: { roomId: string };
   ink_reclaimed: { amount: number };
   player_respawned: { x: number; y: number };
+  /** Un mot-loi a été raturé (déviation vers RATURE). */
+  canon_erased: { objectId: number; flag: string };
+  /** Un blanc ▢ a été comblé (déviation vers POINT FINAL). */
+  canon_completed: { objectId: number; flag: string };
+  /** Le joueur atteint une sortie de chapitre. */
+  chapter_ended: { ending: string };
 }
 
 export type GameEventBus = EventBus<GameEvents>;

@@ -132,45 +132,77 @@ describe('mergeSolidTiles — fusion des tuiles en dalles', () => {
   });
 });
 
-describe('salle marge_01 (données réelles du jeu, v2)', () => {
+describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)', () => {
   const map = parseTiledMap(marge01);
 
   it('a les dimensions attendues et un contour fermé', () => {
-    expect(map.widthTiles).toBe(74);
+    expect(map.widthTiles).toBe(64);
     expect(map.heightTiles).toBe(17);
-    // Fond de page plein
-    for (let tx = 0; tx < 74; tx++) expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
-    // Marges gauche/droite pleines
+    // Sol continu sur les 3 rangées du bas (pas de chute mortelle dans la marge).
+    for (let tx = 1; tx <= 62; tx++) {
+      expect(gidAt(map, tx, 14)).toBeGreaterThan(0);
+      expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
+    }
+    // Bord haut + marges gauche/droite pleines.
+    for (let tx = 0; tx < 64; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
     for (let ty = 0; ty < 17; ty++) {
       expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
-      expect(gidAt(map, 73, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, 63, ty)).toBeGreaterThan(0);
     }
   });
 
-  it('contient les objets requis (et plus de plateformes pré-placées)', () => {
+  it('contient les objets requis, dont les mots-loi et deux sorties', () => {
     const types = new Set(map.objects.map((o) => o.type));
-    for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'exit']) {
+    for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'exit', 'canon']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
-    // La mécanique de tracé souris remplace les plateformes non-écrites.
-    expect(types.has('unwritten')).toBe(false);
+    expect(types.has('unwritten')).toBe(false); // plus de plateformes pré-placées
+
+    // Deux sorties = les deux fins en miniature (rature / point final).
+    const endings = map.objects
+      .filter((o) => o.type === 'exit')
+      .map((o) => o.properties['ending']);
+    expect(new Set(endings)).toEqual(new Set(['rature', 'point']));
+
+    // Les obstacles SONT des mots-loi : 2 barrières (enfermé, jamais) + 1 blanc.
+    const canon = map.objects.filter((o) => o.type === 'canon');
+    const modes = canon.map((o) => o.properties['mode']);
+    expect(new Set(modes)).toEqual(new Set(['barrier', 'latent']));
+    const barrierTexts = canon
+      .filter((o) => o.properties['mode'] === 'barrier')
+      .map((o) => o.properties['text']);
+    expect(new Set(barrierTexts)).toEqual(new Set(['enfermé', 'jamais']));
   });
 
-  it('les deux fosses sont ouvertes et forcent le tracé (mur opposé trop haut)', () => {
-    // VOID A (cols 17-28) : entièrement ouverte au niveau du sol de départ.
-    for (let tx = 17; tx <= 28; tx++) expect(gidAt(map, tx, 14)).toBe(0);
-    // VOID B (cols 41-51) : ouverte.
-    for (let tx = 41; tx <= 51; tx++) expect(gidAt(map, tx, 14)).toBe(0);
-    // Île 1 (haute) : sa surface est en rangée 12, 32 px au-dessus du sol de départ
-    // (rangée 14) → infranchissable au saut depuis le fond, tracé obligatoire.
-    expect(gidAt(map, 29, 12)).toBeGreaterThan(0); // surface de l'île 1
-    expect(gidAt(map, 29, 13)).toBeGreaterThan(0); // île pleine (rows 12-15)
-    expect(gidAt(map, 29, 11)).toBe(0); // rien au-dessus de la surface
+  it('« enfermé » : mot-cage de départ, hors décor fixe, neutre (apprentissage)', () => {
+    // Objet "canon" en x14-15 : le calque ground reste vide là où il se dresse.
+    for (let ty = 8; ty <= 13; ty++) {
+      expect(gidAt(map, 14, ty)).toBe(0);
+      expect(gidAt(map, 15, ty)).toBe(0);
+    }
+    const enferme = map.objects.find((o) => o.properties['text'] === 'enfermé');
+    expect(enferme?.properties['mode']).toBe('barrier');
+    expect(enferme?.properties['flag']).toBe('efface_enferme');
+    expect(enferme?.properties['leaning']).toBeUndefined(); // neutre : ne pèse pas sur la fin
   });
 
-  it('la corniche de sortie est haute (montée à tracer)', () => {
-    // Corniche cols 69-72 en rangée 5 (surface y=80), très au-dessus du palier (rangée 12).
-    for (let tx = 69; tx <= 72; tx++) expect(gidAt(map, tx, 5)).toBeGreaterThan(0);
-    expect(gidAt(map, 70, 11)).toBe(0); // vide sous la corniche → escalier d'encre
+  it('la passerelle POINT FINAL a un trou de 2 tuiles : le blanc ▢ à combler', () => {
+    // Passerelle en rangée 9, ininterrompue sauf le trou x40-41.
+    expect(gidAt(map, 39, 9)).toBeGreaterThan(0);
+    expect(gidAt(map, 40, 9)).toBe(0); // ▢
+    expect(gidAt(map, 41, 9)).toBe(0); // ▢
+    expect(gidAt(map, 42, 9)).toBeGreaterThan(0);
+  });
+
+  it('« jamais » : barrage final effaçable qui penche vers RATURE', () => {
+    // Objet "canon" en x50-51 : ground vide là où il se dresse.
+    for (let ty = 8; ty <= 13; ty++) {
+      expect(gidAt(map, 50, ty)).toBe(0);
+      expect(gidAt(map, 51, ty)).toBe(0);
+    }
+    const jamais = map.objects.find((o) => o.properties['text'] === 'jamais');
+    expect(jamais?.properties['mode']).toBe('barrier');
+    expect(jamais?.properties['flag']).toBe('rature_jamais');
+    expect(jamais?.properties['leaning']).toBe(-1);
   });
 });

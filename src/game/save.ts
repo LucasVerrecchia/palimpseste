@@ -5,10 +5,11 @@
  */
 
 export const SAVE_KEY = 'palimpseste_save';
-// v2 : refonte de la mécanique d'encre (tracé souris) + nouveau level design.
-// Les sauvegardes v1 pointent vers l'ancienne géométrie (playerPos pourrait
-// tomber dans un mur) : parseSave les rejette → nouvelle partie propre.
-export const SAVE_VERSION = 2;
+// v3 : refonte du chapitre 1 (mécanique de déviation, D11) → nouvelle géométrie
+// de marge_01. Les saves v2 restauraient un playerPos de l'ancien tracé (ex.
+// encrier tout à droite) et faisaient réapparaître le joueur au mauvais endroit :
+// parseSave les rejette → nouvelle partie propre au spawn de gauche.
+export const SAVE_VERSION = 3;
 
 export interface SaveData {
   version: typeof SAVE_VERSION;

@@ -38,7 +38,14 @@ danger #C1362B, non-écrit #CFE3E8.
 
 ## État d'avancement
 - Phase 0 (fondations) : terminée le 2026-07-05.
-- Phase 1 (prototype vertical) : code terminé le 2026-07-05 — en attente de
-  playtest/validation de Lucas. Salle marge_01, physique swept, ÉCRIRE,
-  1 PNJ (dialogue placeholder), save localStorage, 47 tests.
+- Phase 1 (prototype vertical) : code terminé le 2026-07-05.
+- Direction artistique (D9) + encre à la souris (D10) : intégrées (07-06/07-07).
+- Chapitre 1 « La Marge » — mécanique de **déviation** (D11, 2026-07-08) :
+  les obstacles SONT les mots de la phrase. Mot-cage « enfermé » à raturer dès
+  le départ (1er geste concret) ; au choix final, raturer « jamais » (→ RATURE)
+  OU combler le blanc ▢ (→ POINT FINAL). La phrase-loi (bandeau) se recompose
+  en phrase cohérente selon les choix (`resolveSentence`, variantes data). 2
+  sorties, `endingLeaning` nourri. Save v3, `AUTO_RESUME` off en dev, bulle de
+  dialogue à hauteur dynamique. Textes = [proposition] à valider. 75 tests.
+  **En attente de playtest.**
 - Phases 2-4 : à venir (attendre validation humaine entre chaque phase).
