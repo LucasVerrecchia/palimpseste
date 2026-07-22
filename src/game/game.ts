@@ -915,7 +915,9 @@ export class Game {
     ctx.textBaseline = 'alphabetic';
     const width = ctx.measureText(text).width;
     const cx = INTERNAL_WIDTH / 2;
-    const y = 20;
+    // Sous la jauge d'encre/PV (haut-gauche, y jusqu'à ~32) : le bandeau est
+    // centré mais assez large pour empiéter sur ce coin si on le met à y=20.
+    const y = 38;
 
     ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.55);
     ctx.beginPath();
