@@ -112,12 +112,14 @@ export const BOSS = {
   contactDamage: 12,
   /** Délai entre deux bulles d'encre tirées (secondes). */
   rangedCooldownSeconds: 2.2,
-  /** Vitesse horizontale de la bulle (px/s) — volontairement lente : esquivable. */
+  /** Vitesse de la bulle (px/s), dans n'importe quelle direction — volontairement lente : esquivable. */
   projectileSpeed: 85,
   projectileRadius: 5,
   /** Durée de vie d'une bulle avant qu'elle s'estompe (secondes). */
   projectileLifeSeconds: 3.5,
   projectileDamage: 8,
+  /** Anticipation du tir sur la vitesse du joueur (secondes) — vise "intelligent", pas plus fort. */
+  projectileLeadSeconds: 0.3,
 } as const;
 
 /**
@@ -153,6 +155,13 @@ export const RENDERING = {
   shadowColor: 'rgba(31, 27, 22, 0.28)',
   /** Durée de l'écrasement du joueur à l'atterrissage (s). */
   landSquashSeconds: 0.12,
+  /**
+   * Facteur de défilement du décor en arrière-plan (< 1 = défile plus
+   * lentement que le premier plan, effet de profondeur). Retour de Lucas
+   * (2026-07-22) : le décor narratif doit lire comme de l'arrière-plan, pas
+   * comme des éléments calés sur les objets de jeu au premier plan.
+   */
+  parallaxFactor: 0.85,
 } as const;
 
 /** Particules d'encre et ambiance. */

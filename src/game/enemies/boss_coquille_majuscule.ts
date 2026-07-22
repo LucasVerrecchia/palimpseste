@@ -12,13 +12,25 @@ import { BOSS, PHYSICS, TILE_SIZE } from '../config';
 
 export type BossPhase = 'patrol' | 'telegraph' | 'vulnerable' | 'recover' | 'defeated';
 
-/** Bulle d'encre tirée par le boss : avance en ligne droite, sans gravité. */
+/**
+ * Bulle d'encre tirée par le boss : avance en ligne droite dans n'importe
+ * quelle direction, sans gravité. Traverse les plateformes/décor (une bulle
+ * d'encre flotte) ; seuls les murs extérieurs de la salle l'arrêtent — voir
+ * `roomBounds` dans `stepBoss`.
+ */
 export interface BossProjectile {
   x: number;
   y: number;
   vx: number;
+  vy: number;
   /** Secondes écoulées depuis le tir (expire à `BOSS.projectileLifeSeconds`). */
   age: number;
+}
+
+/** Dimensions de la salle courante, en pixels — pour stopper les bulles aux murs extérieurs. */
+export interface RoomBounds {
+  width: number;
+  height: number;
 }
 
 export interface BossState {
@@ -33,6 +45,8 @@ export interface BossState {
   /** Secondes avant le prochain tir de bulle d'encre. */
   rangedCooldown: number;
   projectiles: BossProjectile[];
+  /** Horloge d'IA qui n'est jamais remise à zéro (contrairement à `phaseTimer`) — sert à faire onduler la vitesse de poursuite. */
+  aiClock: number;
 }
 
 function phaseDuration(phase: BossPhase): number {
@@ -76,33 +90,61 @@ export function createBoss(x: number, y: number, patrolMinX: number, patrolMaxX:
     facing: 1,
     rangedCooldown: BOSS.rangedCooldownSeconds,
     projectiles: [],
+    aiClock: 0,
   };
 }
 
+/**
+ * Vise le joueur avec une légère anticipation (sa vitesse actuelle projetée
+ * un court instant en avant) plutôt que sa position exacte — donne
+ * l'impression que le boss "prévoit" où on va, sans viser plus vite ni plus
+ * loin (retour de Lucas : la poursuite ne doit pas devenir plus dure, juste
+ * moins "bête").
+ */
 function fireProjectile(boss: BossState, playerBody: Body): BossProjectile {
-  const dir = playerBody.x + playerBody.w / 2 < boss.body.x + boss.body.w / 2 ? -1 : 1;
+  const originX = boss.body.x + boss.body.w / 2;
+  const originY = boss.body.y + boss.body.h / 2;
+  const targetX = playerBody.x + playerBody.w / 2 + playerBody.vx * BOSS.projectileLeadSeconds;
+  const targetY = playerBody.y + playerBody.h / 2 + playerBody.vy * BOSS.projectileLeadSeconds;
+  const dx = targetX - originX;
+  const dy = targetY - originY;
+  const dist = Math.hypot(dx, dy) || 1;
   return {
-    x: boss.body.x + boss.body.w / 2,
-    y: boss.body.y + boss.body.h / 2,
-    vx: BOSS.projectileSpeed * dir,
+    x: originX,
+    y: originY,
+    vx: (dx / dist) * BOSS.projectileSpeed,
+    vy: (dy / dist) * BOSS.projectileSpeed,
     age: 0,
   };
 }
 
 /**
  * Un pas de simulation du boss. Fonction pure, testée. Pendant la patrouille,
- * le boss avance vers le joueur (IA réactive plutôt qu'un aller-retour fixe)
- * en restant dans ses bornes, et tire périodiquement une bulle d'encre lente.
+ * le boss chasse le joueur (IA réactive, vitesse ondulante plutôt qu'un
+ * aller-retour fixe et prévisible comme les ennemis communs) en restant dans
+ * ses bornes, et tire périodiquement une bulle d'encre lente et esquivable
+ * dans la direction du joueur.
  */
-export function stepBoss(boss: BossState, isSolid: SolidQuery, dtSeconds: number, playerBody: Body): BossState {
+export function stepBoss(
+  boss: BossState,
+  isSolid: SolidQuery,
+  dtSeconds: number,
+  playerBody: Body,
+  roomBounds: RoomBounds,
+): BossState {
   if (boss.phase === 'defeated') return boss;
 
   const body: Body = { ...boss.body };
   let facing = boss.facing;
+  const aiClock = boss.aiClock + dtSeconds;
 
   if (boss.phase === 'patrol') {
     facing = playerBody.x + playerBody.w / 2 < body.x + body.w / 2 ? -1 : 1;
-    body.vx = BOSS.patrolSpeed * facing;
+    // Vitesse qui ondule (chasse "vivante") au lieu d'une vitesse constante
+    // qui la rend aussi prévisible qu'une Rature — jamais plus vite que
+    // `patrolSpeed` (pas plus dur, juste moins mécanique).
+    const surge = 0.75 + 0.25 * Math.sin(aiClock * 2.3);
+    body.vx = BOSS.patrolSpeed * surge * facing;
   } else {
     body.vx = 0;
   }
@@ -114,8 +156,15 @@ export function stepBoss(boss: BossState, isSolid: SolidQuery, dtSeconds: number
 
   let rangedCooldown = Math.max(0, boss.rangedCooldown - dtSeconds);
   let projectiles = boss.projectiles
-    .map((p) => ({ ...p, x: p.x + p.vx * dtSeconds, age: p.age + dtSeconds }))
-    .filter((p) => p.age < BOSS.projectileLifeSeconds);
+    .map((p) => ({ ...p, x: p.x + p.vx * dtSeconds, y: p.y + p.vy * dtSeconds, age: p.age + dtSeconds }))
+    .filter(
+      (p) =>
+        p.age < BOSS.projectileLifeSeconds &&
+        p.x >= 0 &&
+        p.x <= roomBounds.width &&
+        p.y >= 0 &&
+        p.y <= roomBounds.height,
+    );
   if (boss.phase === 'patrol' && rangedCooldown <= 0) {
     projectiles = [...projectiles, fireProjectile(boss, playerBody)];
     rangedCooldown = BOSS.rangedCooldownSeconds;
@@ -123,10 +172,19 @@ export function stepBoss(boss: BossState, isSolid: SolidQuery, dtSeconds: number
 
   const phaseTimer = boss.phaseTimer - dtSeconds;
   if (phaseTimer > 0) {
-    return { ...boss, body: moved.body, facing, phaseTimer, rangedCooldown, projectiles };
+    return { ...boss, body: moved.body, facing, phaseTimer, rangedCooldown, projectiles, aiClock };
   }
   const phase = nextPhase(boss.phase);
-  return { ...boss, body: moved.body, facing, phase, phaseTimer: phaseDuration(phase), rangedCooldown, projectiles };
+  return {
+    ...boss,
+    body: moved.body,
+    facing,
+    phase,
+    phaseTimer: phaseDuration(phase),
+    rangedCooldown,
+    projectiles,
+    aiClock,
+  };
 }
 
 export function bossOverlapsPlayer(boss: BossState, playerBody: Body): boolean {

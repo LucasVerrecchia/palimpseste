@@ -87,6 +87,11 @@ const objects = [
     id: id(), name: 'mot_hate', type: 'word', x: 6 * TILE, y: 200, width: 16, height: 16,
     properties: [prop('ability', 'string', 'hate')],
   },
+  // Encrier, juste après le premier mur (celui qu'on franchit en s'y traçant
+  // des plateformes d'encre) — retour de playtest 2026-07-22 : il était trop
+  // loin (juste avant le mi-boss), pas utile pour tout le reste du niveau.
+  { id: id(), name: 'encrier_chapitre1', type: 'inkwell', x: 16 * TILE, y: 200, width: 16, height: 24 },
+
   {
     id: id(), name: 'mot_ales', type: 'word', x: 20 * TILE, y: 200, width: 16, height: 16,
     properties: [prop('ability', 'string', 'ales')],
@@ -111,11 +116,6 @@ const objects = [
     id: id(), name: 'rature_1', type: 'enemy', x: 47 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
     properties: [prop('kind', 'string', 'rature')],
   },
-
-  // Encrier, avant l'arène du mi-boss (retour de playtest 2026-07-22 : il
-  // n'y en avait aucun dans ce niveau — pas de point de sauvegarde ni de
-  // recharge d'encre avant le combat le plus dur).
-  { id: id(), name: 'encrier_chapitre1', type: 'inkwell', x: 54 * TILE, y: 200, width: 16, height: 24 },
 
   // Fiole d'encre rouge : usage unique, restaure une partie des PV. Posée en
   // hauteur au-dessus de l'arène (retour de playtest 2026-07-22 : filet de

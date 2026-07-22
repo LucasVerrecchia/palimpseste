@@ -575,6 +575,7 @@ export class Game {
     this.updateEnemies(dtSeconds);
     this.updateBoss(dtSeconds);
     if (this.player.health <= 0) this.handleDefeat();
+    else if (this.player.body.y + this.player.body.h >= this.room.pixelHeight) this.handleFall();
     this.checkPickups();
     if (this.input.wasPressed('interact')) this.handleInteract();
     if (this.input.wasPressed('respawn')) this.respawn();
@@ -649,7 +650,10 @@ export class Game {
 
     const dashActive = this.player.dashTimer > 0;
 
-    let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds, this.player.body);
+    let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds, this.player.body, {
+      width: this.room.pixelWidth,
+      height: this.room.pixelHeight,
+    });
     boss = resolveBossDashHit(boss, this.player.body, dashActive);
 
     if (this.prevBossPhase !== 'defeated' && boss.phase === 'defeated') {
@@ -957,9 +961,23 @@ export class Game {
    * 2026-07-22 : il n'existait avant aucune condition d'échec.
    */
   private handleDefeat(): void {
+    this.failAndRespawn('Trop délavé, le manuscrit te ramène à l\'encrier.');
+  }
+
+  /**
+   * Chute dans un vrai gouffre (pas de sol en dessous, contrairement au blanc
+   * ▢ de La Marge qui a toujours un filet) : même sanction qu'à 0 PV, retour
+   * de playtest 2026-07-22 — avant, on tombait jusqu'au bord invisible de la
+   * carte sans conséquence.
+   */
+  private handleFall(): void {
+    this.failAndRespawn('Le vide du gouffre t\'engloutit : le manuscrit te ramène à l\'encrier.');
+  }
+
+  private failAndRespawn(message: string): void {
     this.respawn();
     this.player = { ...this.player, health: PLAYER.maxHealth };
-    this.toast('Trop délavé, le manuscrit te ramène à l\'encrier.');
+    this.toast(message);
   }
 
   // ---------- Interactions ----------
@@ -1094,10 +1112,13 @@ export class Game {
   render(ctx: CanvasRenderingContext2D): void {
     ctx.save();
     ctx.translate(-this.camera.x, -this.camera.y);
-
     ctx.drawImage(this.paper, 0, 0);
-    this.renderStoryDecor(ctx);
-    this.renderBossArenaDecor(ctx);
+    ctx.restore();
+
+    this.renderParallaxDecor(ctx);
+
+    ctx.save();
+    ctx.translate(-this.camera.x, -this.camera.y);
     this.renderMotes(ctx);
     this.renderSlabs(ctx);
     this.renderFiligrane(ctx);
@@ -1136,18 +1157,32 @@ export class Game {
   }
 
   /**
-   * Décor narratif en arrière-plan (un-line, esquisse au trait) : la Marge
-   * dit que le mot « resta enfermé [...] et n'en sortit jamais » — on dessine
-   * ce personnage derrière des barreaux, pile sous la barrière-canon
-   * « enfermé ». Tant qu'elle n'est pas raturée, la barrière (dessinée plus
-   * tard, par-dessus) la cache entièrement ; une fois raturée, l'esquisse
-   * reste seule et visible — idée validée avec Lucas (2026-07-22), une seule
-   * illustration statique pour l'instant (une variante par choix viendra plus
-   * tard, en étape 2). Spécifique à La Marge : chapitre_01 est un blockout
-   * sans narration (D13).
+   * Décor en parallaxe : défile plus lentement que le premier plan (facteur
+   * `RENDERING.parallaxFactor` < 1), pour lire comme de l'arrière-plan plutôt
+   * que comme des éléments calés pile sur un objet de jeu — retour de Lucas
+   * (2026-07-22) sur la première version, qui cachait l'illustration
+   * exactement derrière la barrière-canon « enfermé ».
+   */
+  private renderParallaxDecor(ctx: CanvasRenderingContext2D): void {
+    const f = RENDERING.parallaxFactor;
+    ctx.save();
+    ctx.translate(-this.camera.x * f, -this.camera.y * f);
+    this.renderStoryDecor(ctx);
+    this.renderWrittenSelfDecor(ctx);
+    this.renderBossArenaDecor(ctx);
+    ctx.restore();
+  }
+
+  /**
+   * La Marge dit que le mot « resta enfermé [...] et n'en sortit jamais » —
+   * silhouette assise derrière des barreaux, esquisse au trait, révélée une
+   * fois « enfermé » raturé (même déclencheur qu'avant), mais désormais en
+   * arrière-plan parallaxe plutôt que pile calée sur la barrière-canon —
+   * retour de Lucas (2026-07-22). Spécifique à La Marge : chapitre_01 est un
+   * blockout sans narration (D13).
    */
   private renderStoryDecor(ctx: CanvasRenderingContext2D): void {
-    if (this.room.id !== 'marge_01') return;
+    if (this.room.id !== 'marge_01' || this.storyFlags['efface_enferme'] !== true) return;
     const x = 14 * TILE_SIZE;
     const y = 8 * TILE_SIZE;
     const w = 32;
@@ -1391,10 +1426,7 @@ export class Game {
 
     // Blancs ▢ non comblés : cadre pointillé pulsant, invite à écrire dedans.
     for (const blank of this.canonBlanks) {
-      if (this.collectedObjects.has(blank.id)) {
-        this.renderWrittenSelf(ctx, blank);
-        continue;
-      }
+      if (this.collectedObjects.has(blank.id)) continue;
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 3);
       ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.4 + pulse * 0.4);
       ctx.lineWidth = 1.2;
@@ -1414,12 +1446,19 @@ export class Game {
   }
 
   /**
-   * Une fois le blanc ▢ comblé d'encre, une silhouette debout, bras ouverts,
+   * Une fois un blanc ▢ comblé d'encre, une silhouette debout, bras ouverts,
    * se tient là où était le vide : « Tu t'écris dans la phrase » (D11) rendu
-   * visible, pas seulement raconté. Idée validée avec Lucas (2026-07-22) ;
-   * teinte « non-écrit » (et non encre) pour qu'elle se lise comme un ajout
-   * au texte plutôt que comme un obstacle.
+   * visible, pas seulement raconté. Rendue dans la passe de parallaxe (voir
+   * `renderParallaxDecor`) plutôt qu'à l'exacte place du blanc — retour de
+   * Lucas (2026-07-22) : un décor d'arrière-plan, pas un remplacement pile
+   * calé sur l'objet de jeu.
    */
+  private renderWrittenSelfDecor(ctx: CanvasRenderingContext2D): void {
+    for (const blank of this.canonBlanks) {
+      if (this.collectedObjects.has(blank.id)) this.renderWrittenSelf(ctx, blank);
+    }
+  }
+
   private renderWrittenSelf(ctx: CanvasRenderingContext2D, blank: RoomObject): void {
     const cx = blank.x + blank.width / 2;
     const groundY = blank.y;

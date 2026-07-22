@@ -148,4 +148,20 @@ danger #C1362B, non-écrit #CFE3E8.
     et esquivables (`resolveProjectileHits`), même pattern fonctions pures
     que le reste des ennemis (D12).
   - 127 tests, `tsc`/`eslint`/`vite build` verts.
+- **Sixième round (2026-07-22)** :
+  - Projectiles du mi-boss omnidirectionnels (visent le joueur en x ET y, avec
+    une légère anticipation sur sa vitesse) et traversent tout le décor
+    intérieur (plateformes, sol) — ne disparaissent qu'en sortant des murs
+    extérieurs de la salle ou en expirant (`RoomBounds`).
+  - Vrais trous dans chapitre_01 : tomber dans le gouffre AILES renvoie
+    désormais au dernier encrier (`Game.handleFall`, même sanction qu'à 0 PV)
+    au lieu de tomber jusqu'au bord invisible de la carte sans conséquence.
+  - Encrier de chapitre_01 déplacé juste après le premier mur (au lieu d'être
+    collé à l'arène du mi-boss).
+  - Décor narratif passé en parallaxe (`RENDERING.parallaxFactor`, 0.85) :
+    les 3 illustrations défilent plus lentement que le premier plan, pour
+    lire comme de l'arrière-plan plutôt que calées pile sur les objets de jeu.
+  - IA du mi-boss affinée : vitesse de poursuite ondulante (jamais plus vite
+    qu'avant, juste moins mécanique qu'un suivi 1:1 comme la Rature).
+  - 130 tests, `tsc`/`eslint`/`vite build` verts.
 - Phases 2b-4 : à venir (attendre validation humaine entre chaque étape).
