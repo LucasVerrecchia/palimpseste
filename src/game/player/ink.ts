@@ -1,6 +1,10 @@
 /**
  * Ressource d'encre — logique pure (spec §4), testée unitairement.
- * Règle sombre : à sec, écrire puise dans les PV du joueur (le « délavage »).
+ *
+ * Le « délavage » (dépenser des PV à sec, D10) a été retiré après playtest
+ * (2026-07-22, retour direct de Lucas) : à sec, on ne peut plus tracer du
+ * tout — il faut effacer un tracé existant (remboursé) ou revenir à un
+ * encrier. Plus simple à lire pour le joueur qu'une pénalité cachée.
  */
 
 export interface InkState {
@@ -8,27 +12,21 @@ export interface InkState {
   max: number;
 }
 
-export interface SpendResult {
-  ink: InkState;
-  /** PV à retirer au joueur si l'encre ne suffisait pas (délavage). */
-  healthCost: number;
-}
-
 export function createInk(max: number): InkState {
   return { current: max, max };
 }
 
-/**
- * Dépense `cost` d'encre. Si la réserve est insuffisante, le manque est
- * converti en coût de PV — écrire reste toujours possible, mais ça use l'être.
- */
-export function spendInk(ink: InkState, cost: number): SpendResult {
+/** La réserve suffit-elle pour dépenser `cost` ? À vérifier avant `spendInk`. */
+export function canAfford(ink: InkState, cost: number): boolean {
   if (cost < 0) throw new Error('Coût d\'encre négatif');
-  const paidWithInk = Math.min(cost, ink.current);
-  return {
-    ink: { current: ink.current - paidWithInk, max: ink.max },
-    healthCost: cost - paidWithInk,
-  };
+  return ink.current >= cost;
+}
+
+/** Dépense `cost` d'encre. Appelant responsable d'avoir vérifié `canAfford`. */
+export function spendInk(ink: InkState, cost: number): InkState {
+  if (cost < 0) throw new Error('Coût d\'encre négatif');
+  if (ink.current < cost) throw new Error('Encre insuffisante (vérifier canAfford avant spendInk)');
+  return { current: ink.current - cost, max: ink.max };
 }
 
 /** Recharge complète (aux encriers / points de sauvegarde). */
@@ -38,7 +36,6 @@ export function refillInk(ink: InkState): InkState {
 
 /**
  * Rembourse `amount` d'encre (effacement d'un bloc tracé), sans dépasser le max.
- * Le délavage n'est PAS remboursé : on ne rend que de l'encre, jamais des PV.
  */
 export function reclaimInk(ink: InkState, amount: number): InkState {
   if (amount < 0) throw new Error('Remboursement d\'encre négatif');

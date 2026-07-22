@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createInk, reclaimInk, refillInk, spendInk } from '../src/game/player/ink';
+import { canAfford, createInk, reclaimInk, refillInk, spendInk } from '../src/game/player/ink';
 
 describe('ressource d\'encre', () => {
   it('démarre pleine', () => {
@@ -8,30 +8,26 @@ describe('ressource d\'encre', () => {
 
   it('dépense normalement quand la réserve suffit', () => {
     const result = spendInk({ current: 100, max: 100 }, 25);
-    expect(result.ink.current).toBe(75);
-    expect(result.healthCost).toBe(0);
+    expect(result.current).toBe(75);
   });
 
-  it('peut se vider exactement à zéro sans coût de PV', () => {
+  it('peut se vider exactement à zéro', () => {
     const result = spendInk({ current: 25, max: 100 }, 25);
-    expect(result.ink.current).toBe(0);
-    expect(result.healthCost).toBe(0);
+    expect(result.current).toBe(0);
   });
 
-  it('à sec, le manque est converti en coût de PV (délavage)', () => {
-    const result = spendInk({ current: 10, max: 100 }, 25);
-    expect(result.ink.current).toBe(0);
-    expect(result.healthCost).toBe(15);
-  });
-
-  it('complètement à sec, tout le coût passe en PV', () => {
-    const result = spendInk({ current: 0, max: 100 }, 25);
-    expect(result.ink.current).toBe(0);
-    expect(result.healthCost).toBe(25);
+  it('rejette une dépense si la réserve ne suffit pas (plus de délavage, D10 retirée)', () => {
+    expect(() => spendInk({ current: 10, max: 100 }, 25)).toThrow();
   });
 
   it('rejette un coût négatif', () => {
     expect(() => spendInk({ current: 50, max: 100 }, -5)).toThrow();
+  });
+
+  it('canAfford distingue ce qui est finançable ou non', () => {
+    expect(canAfford({ current: 10, max: 100 }, 10)).toBe(true);
+    expect(canAfford({ current: 9, max: 100 }, 10)).toBe(false);
+    expect(() => canAfford({ current: 10, max: 100 }, -1)).toThrow();
   });
 
   it('se recharge complètement à l\'encrier', () => {
@@ -46,7 +42,7 @@ describe('ressource d\'encre', () => {
 
   it('un tracé puis son effacement rendent l\'encre neutre (aller-retour)', () => {
     const start = { current: 80, max: 80 };
-    const afterDraw = spendInk(start, 4).ink; // 76
+    const afterDraw = spendInk(start, 4); // 76
     const afterErase = reclaimInk(afterDraw, 4); // 80
     expect(afterErase).toEqual(start);
   });

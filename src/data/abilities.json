@@ -5,31 +5,29 @@
       "word": "ÉCRIRE",
       "inkCost": 4,
       "effect": "draw_ink",
-      "description": "Trace des blocs d'encre à la souris (clic gauche) pour rendre réel ce qui n'est pas écrit ; le clic droit les efface et rend l'encre."
+      "description": "Trace des blocs d'encre à la souris (clic gauche) pour rendre réel ce qui n'est pas écrit ; le clic droit les efface et rend l'encre.",
+      "control": "souris"
     },
     {
       "id": "breche",
       "word": "BRÈCHE",
       "effect": "erase_layer",
-      "description": "Efface (clic droit) les murs marqués pour révéler le brouillon en filigrane dessous — un nouveau passage."
+      "description": "Efface (clic droit) les murs marqués pour révéler le brouillon en filigrane dessous : un nouveau passage.",
+      "control": "clic droit"
     },
     {
       "id": "hate",
       "word": "HÂTE",
       "effect": "dash",
-      "description": "Une ruade d'encre (Maj) qui franchit les gouffres et traverse les ennemis communs."
-    },
-    {
-      "id": "ancre",
-      "word": "ANCRE",
-      "effect": "wall_climb",
-      "description": "Agrippe les murs en l'air (haut/bas pour grimper ou descendre)."
+      "description": "Une ruade d'encre (Maj) qui franchit les gouffres et traverse les ennemis communs.",
+      "control": "Maj"
     },
     {
       "id": "ales",
-      "word": "ALES",
+      "word": "AILES",
       "effect": "double_jump",
-      "description": "Un second saut dans les airs ; maintenir Espace ensuite plane la chute."
+      "description": "Un second saut dans les airs ; maintenir Espace ensuite plane la chute.",
+      "control": "Espace en l'air"
     }
   ]
 }

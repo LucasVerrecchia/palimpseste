@@ -5,6 +5,7 @@ import {
   bossOverlapsPlayer,
   createBoss,
   resolveBossDashHit,
+  resolveProjectileHits,
   stepBoss,
   type BossState,
 } from '../src/game/enemies/boss_coquille_majuscule';
@@ -14,6 +15,9 @@ const empty: SolidQuery = () => false;
 function playerBody(partial: Partial<Body> = {}): Body {
   return { x: 0, y: 0, w: 12, h: 22, vx: 0, vy: 0, ...partial };
 }
+
+// Joueur loin de tout, pour les tests qui ne portent pas sur l'IA/le ciblage.
+const farPlayer = playerBody({ x: 500 });
 
 describe('createBoss', () => {
   it('démarre en patrouille, à pleine vie', () => {
@@ -26,26 +30,74 @@ describe('createBoss', () => {
 describe('stepBoss — cycle de phases télégraphié', () => {
   it('enchaîne patrol → telegraph → vulnerable → recover → patrol', () => {
     let boss = createBoss(0, 0, 0, 100);
-    boss = stepBoss(boss, empty, BOSS.patrolSeconds + 0.01);
+    boss = stepBoss(boss, empty, BOSS.patrolSeconds + 0.01, farPlayer);
     expect(boss.phase).toBe('telegraph');
-    boss = stepBoss(boss, empty, BOSS.telegraphSeconds + 0.01);
+    boss = stepBoss(boss, empty, BOSS.telegraphSeconds + 0.01, farPlayer);
     expect(boss.phase).toBe('vulnerable');
-    boss = stepBoss(boss, empty, BOSS.vulnerableSeconds + 0.01);
+    boss = stepBoss(boss, empty, BOSS.vulnerableSeconds + 0.01, farPlayer);
     expect(boss.phase).toBe('recover');
-    boss = stepBoss(boss, empty, BOSS.recoverSeconds + 0.01);
+    boss = stepBoss(boss, empty, BOSS.recoverSeconds + 0.01, farPlayer);
     expect(boss.phase).toBe('patrol');
-  });
-
-  it('rebondit sur ses bornes de patrouille', () => {
-    const boss: BossState = { ...createBoss(100, 0, 0, 100) };
-    const next = stepBoss(boss, empty, 1 / 60);
-    expect(next.facing).toBe(-1);
   });
 
   it('un boss vaincu ne bouge plus (no-op)', () => {
     const boss: BossState = { ...createBoss(0, 0, 0, 100), phase: 'defeated', health: 0 };
-    const next = stepBoss(boss, empty, 5);
+    const next = stepBoss(boss, empty, 5, farPlayer);
     expect(next).toEqual(boss);
+  });
+});
+
+describe('stepBoss — IA de patrouille réactive', () => {
+  it('avance vers le joueur plutôt que de suivre un aller-retour fixe', () => {
+    const boss = createBoss(50, 0, 0, 100);
+    const next = stepBoss(boss, empty, 1 / 60, playerBody({ x: 300 }));
+    expect(next.facing).toBe(1);
+    expect(next.body.x).toBeGreaterThan(boss.body.x);
+  });
+
+  it('change de direction si le joueur passe de l\'autre côté', () => {
+    const boss = createBoss(50, 0, 0, 100);
+    const next = stepBoss(boss, empty, 1 / 60, playerBody({ x: -300 }));
+    expect(next.facing).toBe(-1);
+    expect(next.body.x).toBeLessThan(boss.body.x);
+  });
+
+  it('reste dans ses bornes de patrouille même si le joueur est plus loin', () => {
+    const boss = createBoss(99, 0, 0, 100);
+    const next = stepBoss(boss, empty, 1, playerBody({ x: 500 }));
+    expect(next.body.x).toBeLessThanOrEqual(100);
+  });
+
+  it('tire une bulle d\'encre vers le joueur une fois le cooldown écoulé', () => {
+    const boss = createBoss(50, 0, 0, 100);
+    const next = stepBoss(boss, empty, BOSS.rangedCooldownSeconds + 0.01, playerBody({ x: 300 }));
+    expect(next.projectiles).toHaveLength(1);
+    expect(next.projectiles[0]?.vx).toBeGreaterThan(0); // joueur à droite
+    expect(next.rangedCooldown).toBeCloseTo(BOSS.rangedCooldownSeconds);
+  });
+
+  it('une bulle d\'encre expire après sa durée de vie', () => {
+    let boss = createBoss(50, 0, 0, 100);
+    boss = stepBoss(boss, empty, BOSS.rangedCooldownSeconds + 0.01, playerBody({ x: 300 }));
+    expect(boss.projectiles).toHaveLength(1);
+    boss = stepBoss(boss, empty, BOSS.projectileLifeSeconds + 0.1, playerBody({ x: 300 }));
+    expect(boss.projectiles).toHaveLength(0);
+  });
+});
+
+describe('resolveProjectileHits', () => {
+  it('retire une bulle qui touche le joueur et compte le coup', () => {
+    const boss: BossState = { ...createBoss(0, 0, 0, 100), projectiles: [{ x: 5, y: 5, vx: 10, age: 0 }] };
+    const result = resolveProjectileHits(boss, playerBody({ x: 0, y: 0 }));
+    expect(result.hits).toBe(1);
+    expect(result.boss.projectiles).toHaveLength(0);
+  });
+
+  it('laisse intactes les bulles hors de portée', () => {
+    const boss: BossState = { ...createBoss(0, 0, 0, 100), projectiles: [{ x: 500, y: 500, vx: 10, age: 0 }] };
+    const result = resolveProjectileHits(boss, playerBody({ x: 0, y: 0 }));
+    expect(result.hits).toBe(0);
+    expect(result.boss.projectiles).toHaveLength(1);
   });
 });
 

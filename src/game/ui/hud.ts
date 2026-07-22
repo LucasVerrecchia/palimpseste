@@ -13,11 +13,29 @@ export interface Toast {
 
 const GAUGE = { x: 12, y: 12, width: 74, height: 10 } as const;
 
+/** Petit cœur vectoriel (une ligne, cohérent avec le style des icônes de pouvoir). */
+function drawHeartIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = PALETTE.danger;
+  ctx.beginPath();
+  ctx.moveTo(0, r);
+  ctx.bezierCurveTo(-r * 1.6, -r * 0.5, -r, -r * 1.8, 0, -r * 0.7);
+  ctx.bezierCurveTo(r, -r * 1.8, r * 1.6, -r * 0.5, 0, r);
+  ctx.fill();
+  ctx.restore();
+}
+
+export interface UnlockedAbilityChip {
+  word: string;
+  control: string;
+}
+
 export function drawHud(
   ctx: CanvasRenderingContext2D,
   ink: InkState,
   health: number,
-  unlockedWords: readonly string[],
+  unlockedAbilities: readonly UnlockedAbilityChip[],
 ): void {
   // Jauge d'encre en pilule
   ctx.fillStyle = hexAlpha(PALETTE.ink, 0.1);
@@ -48,7 +66,9 @@ export function drawHud(
   ctx.textAlign = 'left';
   ctx.fillText('encre', GAUGE.x + GAUGE.width + 6, GAUGE.y + GAUGE.height - 2);
 
-  // PV : visibles seulement si entamés (le délavage)
+  // PV : visibles seulement si entamés (contact ennemi/boss). Petit cœur +
+  // texte "PV" à côté (retour de playtest 2026-07-22 : sans repère, on ne
+  // devine pas que cette barre représente la vie).
   if (health < PLAYER.maxHealth) {
     ctx.fillStyle = hexAlpha(PALETTE.danger, 0.15);
     ctx.beginPath();
@@ -58,27 +78,41 @@ export function drawHud(
     ctx.beginPath();
     ctx.roundRect(GAUGE.x, GAUGE.y + 15, (health / PLAYER.maxHealth) * GAUGE.width, 5, 2.5);
     ctx.fill();
+
+    drawHeartIcon(ctx, GAUGE.x + GAUGE.width + 9, GAUGE.y + 17.5, 3.5);
+    ctx.fillStyle = PALETTE.sepia;
+    ctx.font = 'italic 9px Georgia, serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('PV', GAUGE.x + GAUGE.width + 16, GAUGE.y + 20);
   }
 
-  // Lexique : mots retrouvés en chips, en haut à droite
-  ctx.font = 'italic 10px Georgia, serif';
-  unlockedWords.forEach((word, i) => {
-    const textWidth = ctx.measureText(word).width;
-    const chipW = textWidth + 14;
+  // Lexique : mots retrouvés en chips, en haut à droite — mot + touche
+  // affichée à côté (retour de playtest 2026-07-22 : sans ça, un pouvoir
+  // ramassé mais dont on ignore la commande "ne sert à rien").
+  unlockedAbilities.forEach(({ word, control }, i) => {
+    ctx.font = 'italic bold 10px Georgia, serif';
+    const wordWidth = ctx.measureText(word).width;
+    ctx.font = '8px Georgia, serif';
+    const controlWidth = ctx.measureText(control).width;
+    const chipW = Math.max(wordWidth, controlWidth) + 14;
     const x = INTERNAL_WIDTH - 12 - chipW;
-    const y = 12 + i * 18;
+    const y = 12 + i * 26;
     ctx.fillStyle = hexAlpha(PALETTE.ink, 0.07);
     ctx.beginPath();
-    ctx.roundRect(x, y, chipW, 14, 7);
+    ctx.roundRect(x, y, chipW, 22, 7);
     ctx.fill();
     ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.4);
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(x + 0.5, y + 0.5, chipW - 1, 13, 7);
+    ctx.roundRect(x + 0.5, y + 0.5, chipW - 1, 21, 7);
     ctx.stroke();
-    ctx.fillStyle = PALETTE.sepia;
     ctx.textAlign = 'center';
+    ctx.font = 'italic bold 10px Georgia, serif';
+    ctx.fillStyle = PALETTE.sepia;
     ctx.fillText(word, x + chipW / 2, y + 10.5);
+    ctx.font = '8px Georgia, serif';
+    ctx.fillStyle = hexAlpha(PALETTE.sepia, 0.75);
+    ctx.fillText(control, x + chipW / 2, y + 19);
   });
 }
 

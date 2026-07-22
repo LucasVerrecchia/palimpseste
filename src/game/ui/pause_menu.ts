@@ -1,0 +1,96 @@
+/**
+ * Menu pause (Échap) : recommencer le niveau, voir les pouvoirs, quitter.
+ * Pur affichage — la navigation/les actions vivent dans game.ts. Retour de
+ * playtest 2026-07-22 : aucun moyen de relire les commandes des pouvoirs ni
+ * de recommencer une salle ratée.
+ */
+import { hexAlpha, INTERNAL_HEIGHT, INTERNAL_WIDTH, PALETTE, RENDERING } from '../config';
+import type { AbilityDef } from '../player/abilities';
+
+export type PauseView = 'menu' | 'powers';
+
+export const PAUSE_MENU_OPTIONS = ['Recommencer le niveau', 'Voir les pouvoirs', 'Quitter'] as const;
+
+function panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  ctx.shadowColor = RENDERING.shadowColor;
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = PALETTE.parchment;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 10);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = hexAlpha(PALETTE.ink, 0.75);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5, 10);
+  ctx.stroke();
+}
+
+export function drawPauseMenu(
+  ctx: CanvasRenderingContext2D,
+  view: PauseView,
+  selected: number,
+  abilities: readonly AbilityDef[],
+  unlocked: ReadonlySet<string>,
+): void {
+  ctx.fillStyle = hexAlpha(PALETTE.ink, 0.5);
+  ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+
+  const width = 220;
+  const x = (INTERNAL_WIDTH - width) / 2;
+
+  if (view === 'menu') {
+    const height = 34 + PAUSE_MENU_OPTIONS.length * 22 + 8;
+    const y = (INTERNAL_HEIGHT - height) / 2;
+    panel(ctx, x, y, width, height);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.sepia;
+    ctx.font = 'italic bold 13px Georgia, serif';
+    ctx.fillText('Pause', x + width / 2, y + 20);
+
+    ctx.font = '11px Georgia, serif';
+    PAUSE_MENU_OPTIONS.forEach((label, i) => {
+      const oy = y + 42 + i * 22;
+      const isSelected = i === selected;
+      if (isSelected) {
+        const w = ctx.measureText(label).width + 24;
+        ctx.fillStyle = hexAlpha(PALETTE.danger, 0.12);
+        ctx.beginPath();
+        ctx.roundRect(x + width / 2 - w / 2, oy - 11, w, 16, 8);
+        ctx.fill();
+      }
+      ctx.fillStyle = isSelected ? PALETTE.danger : PALETTE.ink;
+      ctx.fillText(`${isSelected ? '› ' : ''}${label}`, x + width / 2, oy);
+    });
+    return;
+  }
+
+  // view === 'powers'
+  const rowH = 22;
+  const height = 34 + abilities.length * rowH + 16;
+  const y = Math.max(8, (INTERNAL_HEIGHT - height) / 2);
+  panel(ctx, x, y, width, height);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = PALETTE.sepia;
+  ctx.font = 'italic bold 13px Georgia, serif';
+  ctx.fillText('Pouvoirs', x + width / 2, y + 20);
+
+  ctx.textAlign = 'left';
+  abilities.forEach((ability, i) => {
+    const oy = y + 38 + i * rowH;
+    const has = unlocked.has(ability.id);
+    ctx.font = 'italic bold 10px Georgia, serif';
+    ctx.fillStyle = has ? PALETTE.ink : hexAlpha(PALETTE.sepia, 0.4);
+    ctx.fillText(has ? ability.word : '？？？', x + 16, oy);
+    ctx.font = '8px Georgia, serif';
+    ctx.fillStyle = hexAlpha(PALETTE.sepia, has ? 0.9 : 0.4);
+    ctx.fillText(has ? ability.control : 'à trouver', x + 16, oy + 10);
+  });
+
+  ctx.textAlign = 'center';
+  ctx.font = 'italic 9px Georgia, serif';
+  ctx.fillStyle = hexAlpha(PALETTE.sepia, 0.7);
+  ctx.fillText('E : retour', x + width / 2, y + height - 6);
+}

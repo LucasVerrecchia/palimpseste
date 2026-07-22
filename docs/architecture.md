@@ -99,10 +99,18 @@ Choix de conception (parmi 3 options soumises à l'humain) :
   collision segment/pente — nid à bugs, risque scope).
 - **Difficulté par l'encre, pas par l'adresse** : budget limité entre deux
   encriers ; franchir les deux fosses dépasse le budget → il faut effacer le
-  premier pont pour financer le second (puzzle de récupération). Le délavage
-  (à sec, tracer coûte des PV) reste le filet punitif.
+  premier pont pour financer le second (puzzle de récupération).
 - **Anti-softlock** : touche R = retour au dernier encrier + recharge. Bump
   `SAVE_VERSION` v1→v2 (les vieilles saves pointaient vers l'ancienne géométrie).
+
+> **Amendement 2026-07-22 (retour de playtest Phase 2)** : le « délavage »
+> (à sec, tracer coûtait des PV plutôt que d'être bloqué) a été **retiré**.
+> Lucas l'a trouvé confus en jeu (une jauge rouge de PV apparaît sans qu'on
+> comprenne pourquoi, et on peut continuer à tracer indéfiniment). Depuis,
+> `canAfford`/`spendInk` (player/ink.ts) refusent simplement la dépense si la
+> réserve ne suffit pas — `tryPaint` bloque le tracé et affiche un toast. Plus
+> simple à lire, et ça redonne tout son poids au budget d'encre (le vrai
+> ressort de la difficulté, cf. ci-dessus).
 
 Détails techniques : `engine/pointer.ts` (état souris), `Renderer.screenToView`
 (écran→vue, la caméra fait vue→monde), `tilesBetween` (rastérisation d'un trait
@@ -210,6 +218,76 @@ Détails techniques :
 - Le schéma de save (v3, D11) avait déjà `playerPos.room`/`visitedRooms` :
   aucune migration nécessaire, seul le loader branche désormais sur la bonne
   salle.
+
+> **Amendements 2026-07-22 (retour du premier playtest de chapitre_01)** :
+> - La porte vers `chapitre_01` était placée juste après la cage « enfermé »
+>   (le tout premier obstacle) et sans condition — incohérent, on pouvait
+>   quitter le chapitre avant même de l'avoir commencé. Déplacée en fin de
+>   parcours (avant le barrage « jamais », donc accessible quelle que soit la
+>   route choisie) et verrouillée par une nouvelle propriété d'objet Tiled,
+>   `requiresFlag` (ici `chapitre1_fini`, posé par les deux sorties de fin de
+>   chapitre) — `Game.isDoorUnlocked`/`checkDoors` la vérifient, le rendu
+>   assombrit la porte tant qu'elle est close.
+> - Le mur ANCRE de `chapitre_01` était **infranchissable** : la salle
+>   n'avait aucun objet `word` pour BRÈCHE/HÂTE/ANCRE/ALES (oubli — seule
+>   ÉCRIRE est ramassable dans `marge_01`). Ajout des 4 mots-pouvoir, chacun
+>   juste avant l'obstacle qu'il permet de franchir (HÂTE tôt aussi, pour le
+>   combat plus loin).
+> - Le bandeau de la phrase-loi (D11) restait affiché en entrant dans
+>   `chapitre_01` alors qu'elle n'appartient qu'à La Marge — `drawSentenceBanner`
+>   se limite désormais à `this.room.id === DEFAULT_ROOM_ID`.
+
+> **Amendements 2026-07-22 (deuxième playtest, retours supplémentaires)** :
+> - **Condition d'échec** : il n'existait aucune réaction à 0 PV (les dégâts
+>   étaient tous plafonnés à 1 PV minimum, un reliquat du délavage). Les
+>   planchers ont été retirés (`Math.max(0, ...)` au lieu de `Math.max(1, ...)`
+>   dans `applyEnemyContact`/`updateBoss`) et `Game.handleDefeat()` renvoie au
+>   dernier encrier (réutilise `respawn()`) avec PV et encre refaits à neuf.
+> - **Sorties de fin de chapitre incohérentes** : rendues comme des portes
+>   ouvrables (tunnel sombre) qui ne transportaient nulle part — juste un
+>   toast. Elles sont maintenant de vrais murs (`Room.registerWall`/`isWall`,
+>   nouveau registre permanent distinct de `canon`/`breche` puisqu'elles ne
+>   sont jamais effacées) et leur rendu devient une dalle scellée avec un
+>   sceau gravé plutôt qu'un passage. `checkExit` utilise désormais une marge
+>   de contact (`INTERACT_MARGIN`) puisque le joueur ne peut plus les
+>   chevaucher pile.
+> - **Mots-pouvoir peu clairs** : remplacés par des pictogrammes vectoriels
+>   (`Game.renderAbilityIcon`) — plume pour ÉCRIRE (plus cohérent avec
+>   l'histoire qu'épeler le mot), fissure pour BRÈCHE, traînée de vitesse pour
+>   HÂTE, silhouette d'ancre pour ANCRE (jeu de mots encre/ancre déjà dans la
+>   spec), double chevron pour ALES.
+> - **Mur BRÈCHE indiscernable d'un mur normal** : une lézarde en zigzag
+>   (`Game.renderCrack`, forme stable dérivée de l'id de l'objet) est
+>   désormais toujours visible sur les murs BRÈCHE non ouverts, même sans le
+>   pouvoir ou hors de portée — l'indice textuel (« clic droit : brèche »)
+>   reste réservé à quand le pouvoir est acquis.
+> - **Lisibilité du combat/de la fin de chapitre_01** : un indice ponctuel
+>   apparaît à la première fenêtre « vulnerable » du mi-boss (« fonce dedans
+>   (Maj) pour le blesser ») et sa défaite affiche désormais un second toast
+>   marquant la fin du contenu actuellement disponible.
+> - **Suite narrative demandée par Lucas** : chapitre_01 doit rendre visible
+>   le choix fait au chapitre 1 et proposer un nouveau choix qui garde les
+>   deux issues viables. Concept à valider avant implémentation (voir
+>   `prompts_logs/03_code_prompts.md`, session 9) — pas encore codé.
+
+> **Amendements 2026-07-22 (troisième playtest)** :
+> - **Dégâts incohérents sur un coup réussi** : dasher sur le mi-boss pendant
+>   sa fenêtre vulnérable infligeait aussi des dégâts au joueur (les deux
+>   AABB se chevauchent forcément au moment du coup). `Game.updateBoss`
+>   détecte maintenant `dashHitLanding` (dash actif + boss vulnérable + contact
+>   *avant* résolution) et saute les dégâts de contact ce frame-là.
+> - **Commandes invisibles** : un pouvoir ramassé (ANCRE en particulier)
+>   sans savoir quelle touche l'active revient à « ne servir à rien ». Chaque
+>   `AbilityDef` a désormais un champ `control` (data-driven, `abilities.json`)
+>   affiché (a) dans le toast de ramassage — qui était bogué : câblé en dur
+>   sur les commandes d'ÉCRIRE quel que soit le pouvoir ramassé — (b) sous le
+>   mot dans le lexique du HUD (`ui/hud.ts`), (c) dans le nouveau menu pause.
+> - **Menu pause** (`Échap`, `ui/pause_menu.ts`) : Recommencer le niveau
+>   (`Game.restartLevel`, recharge la salle courante, PV/encre au max,
+>   pouvoirs conservés), Voir les pouvoirs (liste data-driven de tous les
+>   pouvoirs, débloqués ou non), Quitter (recharge la page — pas d'écran-titre
+>   avant une phase ultérieure). Gèle entièrement la simulation (`Game.update`
+>   retourne tôt) plutôt que de mettre en pause juste le rendu.
 
 ## Diagramme de dépendances (cible)
 

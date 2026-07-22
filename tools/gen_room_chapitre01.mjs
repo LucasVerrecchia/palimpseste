@@ -4,11 +4,12 @@
  * Décision de calibrage Phase 2 (voir docs/architecture.md D13) : cette salle
  * est un terrain d'essai MÉCANIQUE — aucun PNJ, aucune phrase-loi, aucun texte
  * narratif (les choix narratifs se décident avec Lucas, pas dans cette passe).
- * Elle enchaîne dans l'ordre les 3 pouvoirs restants + le filigrane + un
- * ennemi de chaque sorte + le mi-boss, pour prouver la chaîne complète :
+ * Elle enchaîne dans l'ordre les pouvoirs restants + le filigrane + un ennemi
+ * de chaque sorte + le mi-boss, pour prouver la chaîne complète :
  *
- *   porte (retour La Marge) → mur ANCRE (grimper) → gouffre ALES (double saut)
- *   → mur BRÈCHE (effacer → filigrane) → Coquille + Rature → mi-boss.
+ *   porte (retour La Marge) → mur à franchir en s'y traçant des plateformes
+ *   d'encre (ÉCRIRE) → gouffre AILES (double saut) → mur BRÈCHE (effacer →
+ *   filigrane) → Coquille + Rature → arène du mi-boss (avec fiole de secours).
  *
  * Même convention que gen_room_marge01.mjs (D7) : géométrie décrite par des
  * rectangles nommés, JSON compatible Tiled en sortie.
@@ -17,7 +18,7 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const W = 56;
+const W = 68;
 const H = 17;
 const TILE = 16;
 
@@ -35,18 +36,24 @@ solid(0, 0, 0, H - 1); // marge gauche
 solid(W - 1, 0, W - 1, H - 1); // marge droite
 solid(1, 14, W - 2, 16); // sol continu
 
-// Mur ANCRE (x=14) : bloque le couloir au sol, mais laisse 3 tuiles de vide
-// au-dessus (rangées 1-3) pour passer par-dessus une fois grimpé — trop haut
-// pour un simple saut (13 tuiles), ça exige de s'accrocher au mur (ANCRE).
+// Mur à franchir (x=14) : bloque le couloir au sol, mais laisse 3 tuiles de
+// vide au-dessus (rangées 1-3) — trop haut pour un simple saut (13 tuiles),
+// ça exige de se tracer des plateformes d'encre (ÉCRIRE) pour grimper.
 solid(14, 4, 14, 16);
 
-// Gouffre ALES (x=26-31) : 6 tuiles de large, hors de portée d'un saut simple
+// Gouffre AILES (x=26-31) : 6 tuiles de large, hors de portée d'un saut simple
 // mais franchissable avec le double saut.
 clear(26, 14, 31, 16);
 
 // Mur BRÈCHE (x=38) : plein du sol au plafond (rangée 0 incluse) — impossible
 // de grimper par-dessus, seule la BRÈCHE (clic droit + pouvoir) l'ouvre.
 solid(38, 0, 38, 16);
+
+// Arène du mi-boss (x=40 à W-2) : corridor large (retour de playtest
+// 2026-07-22 : trop exigu juste après la BRÈCHE). Petite plateforme surélevée
+// (x=60-64, rangée 9) pour la fiole de secours, accessible en AILES ou en
+// s'y traçant un escalier d'encre.
+solid(60, 9, 64, 9);
 
 // --- Calque "filigrane" (le brouillon d'en dessous, D11/§4) ---------------
 // Entièrement vide : une fois le mur BRÈCHE effacé, le passage s'ouvre
@@ -74,9 +81,19 @@ const objects = [
     ],
   },
 
-  // Mur ANCRE : indication purement mécanique (pas de mot-loi ici).
+  // Mots-pouvoir : chacun juste avant l'obstacle qu'il permet de franchir.
+  // HÂTE tôt, pour le combat contre les ennemis/le mi-boss plus loin.
   {
-    id: id(), name: 'mur_ancre', type: 'wall_hint', x: 14 * TILE, y: 4 * TILE, width: 16, height: 13 * TILE,
+    id: id(), name: 'mot_hate', type: 'word', x: 6 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('ability', 'string', 'hate')],
+  },
+  {
+    id: id(), name: 'mot_ales', type: 'word', x: 20 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('ability', 'string', 'ales')],
+  },
+  {
+    id: id(), name: 'mot_breche', type: 'word', x: 33 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('ability', 'string', 'breche')],
   },
 
   // Mur BRÈCHE : effaçable uniquement avec le pouvoir BRÈCHE.
@@ -87,17 +104,30 @@ const objects = [
 
   // Ennemis communs : une Coquille en patrouille, une Rature qui poursuit.
   {
-    id: id(), name: 'coquille_1', type: 'enemy', x: 39 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
+    id: id(), name: 'coquille_1', type: 'enemy', x: 40 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
     properties: [prop('kind', 'string', 'coquille')],
   },
   {
-    id: id(), name: 'rature_1', type: 'enemy', x: 45 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
+    id: id(), name: 'rature_1', type: 'enemy', x: 47 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
     properties: [prop('kind', 'string', 'rature')],
   },
 
-  // Mi-boss : la Coquille majuscule, en bout de salle.
+  // Encrier, avant l'arène du mi-boss (retour de playtest 2026-07-22 : il
+  // n'y en avait aucun dans ce niveau — pas de point de sauvegarde ni de
+  // recharge d'encre avant le combat le plus dur).
+  { id: id(), name: 'encrier_chapitre1', type: 'inkwell', x: 54 * TILE, y: 200, width: 16, height: 24 },
+
+  // Fiole d'encre rouge : usage unique, restaure une partie des PV. Posée en
+  // hauteur au-dessus de l'arène (retour de playtest 2026-07-22 : filet de
+  // sécurité avant le mi-boss, pour un joueur arrivé entamé).
   {
-    id: id(), name: 'boss_coquille_majuscule', type: 'boss', x: 50 * TILE, y: 14 * TILE - 20, width: 4 * TILE, height: 20,
+    id: id(), name: 'potion_pv', type: 'potion', x: 62 * TILE, y: 9 * TILE - 12, width: 12, height: 12,
+    properties: [prop('flag', 'string', 'potion_chapitre1_pv')],
+  },
+
+  // Mi-boss : la Coquille majuscule, en bout d'arène.
+  {
+    id: id(), name: 'boss_coquille_majuscule', type: 'boss', x: 58 * TILE, y: 14 * TILE - 20, width: 4 * TILE, height: 20,
   },
 ];
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aabbOverlap, isOnGround, isTouchingWall, moveBody, type Body, type SolidQuery } from '../src/engine/physics';
+import { aabbOverlap, isOnGround, moveBody, type Body, type SolidQuery } from '../src/engine/physics';
 
 const TS = 16;
 
@@ -86,21 +86,6 @@ describe('isOnGround', () => {
   it('ne détecte rien en l\'air', () => {
     const airborne = body({ x: 20, y: 40 });
     expect(isOnGround(airborne, floorAt8, TS)).toBe(false);
-  });
-});
-
-describe('isTouchingWall', () => {
-  it('détecte un mur à droite quand le corps est collé contre lui', () => {
-    const touching = body({ x: 10 * TS - 12, y: 50 });
-    expect(isTouchingWall(touching, wallAt10, TS, 1)).toBe(true);
-  });
-  it('ne détecte rien à gauche s\'il n\'y a pas de mur ce côté', () => {
-    const touching = body({ x: 10 * TS - 12, y: 50 });
-    expect(isTouchingWall(touching, wallAt10, TS, -1)).toBe(false);
-  });
-  it('ne détecte rien si le corps est loin du mur', () => {
-    const far = body({ x: 0, y: 50 });
-    expect(isTouchingWall(far, wallAt10, TS, 1)).toBe(false);
   });
 });
 

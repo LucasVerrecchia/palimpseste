@@ -8,7 +8,7 @@
 // Le tracé/effacement d'encre passe par la souris (voir engine/pointer.ts),
 // pas par une action clavier. 'respawn' renvoie au dernier encrier. 'dash'
 // n'existe que si HÂTE est débloqué (le jeu ignore l'action sinon).
-export type Action = 'left' | 'right' | 'up' | 'down' | 'jump' | 'dash' | 'interact' | 'respawn';
+export type Action = 'left' | 'right' | 'up' | 'down' | 'jump' | 'dash' | 'interact' | 'respawn' | 'pause';
 
 export type Bindings = Record<string, Action>;
 
@@ -26,6 +26,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   ShiftRight: 'dash',
   KeyE: 'interact',
   KeyR: 'respawn',
+  Escape: 'pause',
 };
 
 export class Input {

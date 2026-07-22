@@ -40,11 +40,13 @@ import {
   RENDERING,
   TILE_SIZE,
   TOAST_SECONDS,
+  TOAST_STAGGER_SECONDS,
 } from './config';
 import {
   bossOverlapsPlayer,
   createBoss,
   resolveBossDashHit,
+  resolveProjectileHits,
   stepBoss,
   type BossState,
 } from './enemies/boss_coquille_majuscule';
@@ -59,12 +61,13 @@ import {
   type DialogueEffect,
   type DialogueState,
 } from './narrative/dialogue';
-import { getAbility, hasAbility } from './player/abilities';
+import { allAbilities, getAbility, hasAbility } from './player/abilities';
 import { stepPlayer, type PlayerState } from './player/controller';
-import { createInk, reclaimInk, refillInk, spendInk, type InkState } from './player/ink';
+import { canAfford, createInk, reclaimInk, refillInk, spendInk, type InkState } from './player/ink';
 import { parseSave, SAVE_KEY, SAVE_VERSION, type SaveData } from './save';
 import { drawDialogueBox } from './ui/dialogue_box';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
+import { drawPauseMenu, PAUSE_MENU_OPTIONS, type PauseView } from './ui/pause_menu';
 import { Room } from './world/room';
 import {
   applyLeaning,
@@ -109,7 +112,7 @@ function parseSentenceVariants(raw: readonly unknown[]): SentenceVariant[] {
   return variants;
 }
 
-type Mode = 'playing' | 'dialogue';
+type Mode = 'playing' | 'dialogue' | 'paused';
 
 interface ActiveDialogue {
   data: DialogueData;
@@ -172,6 +175,7 @@ export class Game {
   private boss: BossState | null = null;
   private bossContactCooldown = 0;
   private prevBossPhase: string | null = null;
+  private bossHintShown = false;
   private ink!: InkState;
   private readonly unlocked = new Set<string>();
   private readonly storyFlags: Record<string, boolean | number> = {};
@@ -182,9 +186,14 @@ export class Game {
   private checkpoint: { x: number; y: number };
 
   private mode: Mode = 'playing';
+  private pauseView: PauseView = 'menu';
+  private pauseSelected = 0;
   private dialogue: ActiveDialogue | null = null;
   private readonly toasts: Toast[] = [];
-  private exitReached = false;
+  /** File d'attente des messages pas encore affichés (anti-spam, voir `toast`). */
+  private readonly toastQueue: string[] = [];
+  /** Temps restant avant qu'un nouveau message puisse apparaître. */
+  private toastGap = 0;
   private time = 0;
 
   private readonly particles: Particle[] = [];
@@ -256,7 +265,6 @@ export class Game {
     this.motes.length = 0;
     this.spawnMotes();
     this.collectedObjects.clear();
-    this.exitReached = false;
     this.doorCooldown = 0.3;
 
     const spawnObj = this.room.firstObjectOfType('spawn');
@@ -272,7 +280,6 @@ export class Game {
         dashTimer: 0,
         dashCooldown: 0,
         airJumpsUsed: 0,
-        wallGrab: false,
       };
     } else {
       this.player = {
@@ -282,7 +289,6 @@ export class Game {
         dashTimer: 0,
         dashCooldown: 0,
         airJumpsUsed: 0,
-        wallGrab: false,
       };
     }
     this.checkpoint = { x: spawn.x, y: spawn.y };
@@ -340,6 +346,12 @@ export class Game {
       if (typeof flag === 'string' && this.storyFlags[flag] === true) {
         this.room.revealFiligrane(wall.id);
         this.collectedObjects.add(wall.id);
+      }
+    }
+    for (const potion of this.room.objectsOfType('potion')) {
+      const flag = potion.properties['flag'];
+      if (typeof flag === 'string' && this.storyFlags[flag] === true) {
+        this.collectedObjects.add(potion.id);
       }
     }
     if (this.boss !== null && this.storyFlags['boss_coquille_majuscule_vaincu'] === true) {
@@ -406,11 +418,13 @@ export class Game {
     this.bus.on('ability_unlocked', ({ id }) => {
       const def = getAbility(id);
       if (def !== null) {
-        this.toast(`Mot retrouvé : ${def.word} — clic gauche pour tracer, clic droit pour effacer`);
+        // Bug corrigé (2026-07-22) : le message était câblé en dur sur les
+        // commandes d'ÉCRIRE, affiché à l'identique pour HÂTE/AILES/BRÈCHE.
+        this.toast(`Mot retrouvé : ${def.word} (${def.control}). ${def.description}`);
       }
     });
     this.bus.on('game_saved', () => {
-      this.toast('Encrier — encre pleine, place retenue (R pour y revenir).');
+      this.toast('Encrier : encre pleine, place retenue (R pour y revenir).');
     });
     this.bus.on('flag_set', ({ flag }) => {
       if (flag === 'fragment_marge') this.toast('Fragment de page recueilli.');
@@ -457,6 +471,17 @@ export class Game {
   // ---------- Update ----------
 
   update(dtSeconds: number): void {
+    if (this.input.wasPressed('pause') && this.mode !== 'dialogue') {
+      this.mode = this.mode === 'paused' ? 'playing' : 'paused';
+      this.pauseView = 'menu';
+      this.pauseSelected = 0;
+    }
+    if (this.mode === 'paused') {
+      this.updatePauseMenu();
+      this.input.endFrame();
+      return; // simulation entièrement gelée pendant la pause
+    }
+
     this.time += dtSeconds;
     this.toastCooldown = Math.max(0, this.toastCooldown - dtSeconds);
     if (this.mode === 'dialogue') {
@@ -467,7 +492,51 @@ export class Game {
     this.updateParticles(dtSeconds);
     for (const toast of this.toasts) toast.ttl -= dtSeconds;
     while (this.toasts.length > 0 && (this.toasts[0]?.ttl ?? 0) <= 0) this.toasts.shift();
+    this.toastGap = Math.max(0, this.toastGap - dtSeconds);
+    if (this.toastGap <= 0 && this.toastQueue.length > 0) {
+      const text = this.toastQueue.shift();
+      if (text !== undefined) {
+        this.toasts.push({ text, ttl: TOAST_SECONDS });
+        this.toastGap = TOAST_STAGGER_SECONDS;
+      }
+    }
     this.input.endFrame();
+  }
+
+  private updatePauseMenu(): void {
+    if (this.pauseView === 'menu') {
+      if (this.input.wasPressed('up')) {
+        this.pauseSelected = (this.pauseSelected + PAUSE_MENU_OPTIONS.length - 1) % PAUSE_MENU_OPTIONS.length;
+      }
+      if (this.input.wasPressed('down')) {
+        this.pauseSelected = (this.pauseSelected + 1) % PAUSE_MENU_OPTIONS.length;
+      }
+      if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
+        if (this.pauseSelected === 0) {
+          this.restartLevel();
+        } else if (this.pauseSelected === 1) {
+          this.pauseView = 'powers';
+        } else {
+          this.quitGame();
+        }
+      }
+    } else if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
+      this.pauseView = 'menu';
+    }
+  }
+
+  /** Recommence la salle courante à son point de départ (PV/encre refaits, pouvoirs conservés). */
+  private restartLevel(): void {
+    const roomId = this.room.id;
+    this.loadRoom(roomId, false);
+    this.player = { ...this.player, health: PLAYER.maxHealth };
+    this.ink = refillInk(this.ink);
+    this.mode = 'playing';
+  }
+
+  /** Pas d'écran-titre pour l'instant (Phase 2) : "quitter" recharge la page (repart au spawn, AUTO_RESUME=false). */
+  private quitGame(): void {
+    window.location.reload();
   }
 
   private updatePlaying(dtSeconds: number): void {
@@ -479,8 +548,6 @@ export class Game {
       {
         left: this.input.isDown('left'),
         right: this.input.isDown('right'),
-        up: this.input.isDown('up'),
-        down: this.input.isDown('down'),
         jumpPressed: this.input.wasPressed('jump'),
         jumpHeld: this.input.isDown('jump'),
         dashPressed: this.input.wasPressed('dash'),
@@ -507,12 +574,12 @@ export class Game {
 
     this.updateEnemies(dtSeconds);
     this.updateBoss(dtSeconds);
+    if (this.player.health <= 0) this.handleDefeat();
     this.checkPickups();
     if (this.input.wasPressed('interact')) this.handleInteract();
     if (this.input.wasPressed('respawn')) this.respawn();
     this.updateCursorAndDrawing();
     this.checkBlanks();
-    this.checkExit();
     this.doorCooldown = Math.max(0, this.doorCooldown - dtSeconds);
     this.checkDoors();
 
@@ -551,10 +618,10 @@ export class Game {
     this.enemies = next;
   }
 
-  /** Effet au contact (hors dash) : délavage pour la Coquille, encre effacée pour la Rature. */
+  /** Effet au contact (hors dash) : dégâts pour la Coquille, encre effacée pour la Rature. */
   private applyEnemyContact(enemy: Enemy): void {
     if (enemy.kind === 'coquille') {
-      this.player = { ...this.player, health: Math.max(1, this.player.health - ENEMY.contactDamage) };
+      this.player = { ...this.player, health: Math.max(0, this.player.health - ENEMY.contactDamage) };
     } else {
       const tx = Math.floor((this.player.body.x + this.player.body.w / 2) / TILE_SIZE);
       const ty = Math.floor((this.player.body.y + this.player.body.h / 2) / TILE_SIZE);
@@ -563,7 +630,7 @@ export class Game {
         this.room.eraseInk(tx, ty);
         this.toast('Une Rature efface ton trait !');
       } else {
-        this.player = { ...this.player, health: Math.max(1, this.player.health - ENEMY.contactDamage / 2) };
+        this.player = { ...this.player, health: Math.max(0, this.player.health - ENEMY.contactDamage / 2) };
       }
     }
     this.burst(
@@ -580,8 +647,10 @@ export class Game {
     if (this.boss === null) return;
     this.bossContactCooldown = Math.max(0, this.bossContactCooldown - dtSeconds);
 
-    let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds);
-    boss = resolveBossDashHit(boss, this.player.body, this.player.dashTimer > 0);
+    const dashActive = this.player.dashTimer > 0;
+
+    let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds, this.player.body);
+    boss = resolveBossDashHit(boss, this.player.body, dashActive);
 
     if (this.prevBossPhase !== 'defeated' && boss.phase === 'defeated') {
       this.storyFlags['boss_coquille_majuscule_vaincu'] = true;
@@ -589,19 +658,40 @@ export class Game {
       this.bus.emit('boss_defeated', { bossId: 'coquille_majuscule' });
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 24, PALETTE.danger, 80);
       this.toast('La Coquille majuscule est corrigée.');
+      this.toast('Fin du contenu actuel : la suite (zones 3 à 5) arrivera dans une prochaine passe.');
     } else if (boss.phase !== this.prevBossPhase && boss.phase === 'vulnerable') {
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 6, PALETTE.unwritten, 40);
+      if (!this.bossHintShown) {
+        this.bossHintShown = true;
+        this.toast('Sa lueur claire : fonce dedans (Maj) pour le blesser.');
+      }
     }
     this.prevBossPhase = boss.phase;
 
+    // Dasher ne blesse jamais le joueur (même convention que les ennemis
+    // communs) : l'ancien garde-fou ne couvrait que la frame du coup, alors
+    // que le dash dure plusieurs frames au contact du boss pendant qu'il
+    // passe en "recover" — d'où les dégâts persistants (playtest 2026-07-22).
     if (
       boss.phase !== 'defeated' &&
+      !dashActive &&
       this.bossContactCooldown <= 0 &&
       bossOverlapsPlayer(boss, this.player.body)
     ) {
-      this.player = { ...this.player, health: Math.max(1, this.player.health - BOSS.contactDamage) };
+      this.player = { ...this.player, health: Math.max(0, this.player.health - BOSS.contactDamage) };
       this.bossContactCooldown = ENEMY.hitCooldownSeconds;
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, PARTICLES.eraseBurst, PALETTE.danger, 40);
+    }
+
+    const projectileHits = resolveProjectileHits(boss, this.player.body);
+    boss = projectileHits.boss;
+    if (projectileHits.hits > 0 && this.bossContactCooldown <= 0) {
+      this.player = {
+        ...this.player,
+        health: Math.max(0, this.player.health - BOSS.projectileDamage * projectileHits.hits),
+      };
+      this.bossContactCooldown = ENEMY.hitCooldownSeconds;
+      this.burst(this.player.body.x + this.player.body.w / 2, this.player.body.y + this.player.body.h / 2, 8, PALETTE.danger, 45);
     }
 
     this.boss = boss;
@@ -738,7 +828,7 @@ export class Game {
     for (const tile of objectTiles(wall)) {
       this.burst(tile.x * TILE_SIZE + 8, tile.y * TILE_SIZE + 8, 4, PALETTE.sepia, 45);
     }
-    this.toast('La brèche s\'ouvre — le brouillon transparaît.');
+    this.toast('La brèche s\'ouvre : le brouillon transparaît.');
   }
 
   /** Rature un mot-loi solide (déviation RATURE) si le curseur est dessus et à portée. */
@@ -749,7 +839,7 @@ export class Game {
     if (barrier === undefined || this.collectedObjects.has(barrier.id)) return;
     if (!this.tileInReach(tx, ty)) {
       if (this.toastCooldown <= 0) {
-        this.toast('Trop loin pour raturer — approche-toi du mot.');
+        this.toast('Trop loin pour raturer, approche-toi du mot.');
         this.toastCooldown = 1.4;
       }
       return;
@@ -765,7 +855,7 @@ export class Game {
     for (const tile of objectTiles(barrier)) {
       this.burst(tile.x * TILE_SIZE + 8, tile.y * TILE_SIZE + 8, 3, PALETTE.danger, 45);
     }
-    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » — le mot n'a plus de prise sur toi.`);
+    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » : le mot n'a plus de prise sur toi.`);
   }
 
   /** Un blanc ▢ entièrement recouvert d'encre complète la phrase (déviation POINT FINAL). */
@@ -781,7 +871,7 @@ export class Game {
         flag: typeof blank.properties['flag'] === 'string' ? blank.properties['flag'] : '',
       });
       this.burst(blank.x + blank.width / 2, blank.y + blank.height / 2, 14, PALETTE.unwritten, 50);
-      this.toast(`Tu t'écris dans la phrase — le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».`);
+      this.toast(`Tu t'écris dans la phrase : le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».`);
     }
   }
 
@@ -826,20 +916,15 @@ export class Game {
     if (!this.room.isPaintable(tx, ty)) return;
     if (!this.tileInReach(tx, ty)) return;
     if (this.tileOverlapsPlayer(tx, ty)) return;
-
-    const spent = spendInk(this.ink, INK.costPerTile);
-    if (spent.healthCost > 0 && this.player.health - spent.healthCost < 1) {
+    if (!canAfford(this.ink, INK.costPerTile)) {
       if (this.toastCooldown <= 0) {
-        this.toast('Trop délavé — efface de l\'encre (clic droit) pour continuer.');
+        this.toast('Encre épuisée, efface un tracé (clic droit) ou reviens à l\'encrier.');
         this.toastCooldown = 1.4;
       }
       return;
     }
-    this.ink = spent.ink;
-    if (spent.healthCost > 0) {
-      this.player = { ...this.player, health: Math.max(1, this.player.health - spent.healthCost) };
-      this.burst(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, 2, PALETTE.danger, 30);
-    }
+
+    this.ink = spendInk(this.ink, INK.costPerTile);
     this.room.paintInk(tx, ty);
     this.burst(tx * TILE_SIZE + 8, ty * TILE_SIZE + 8, PARTICLES.drawBurst, PALETTE.ink, 35);
   }
@@ -861,10 +946,20 @@ export class Game {
       dashTimer: 0,
       dashCooldown: 0,
       airJumpsUsed: 0,
-      wallGrab: false,
     };
     this.ink = refillInk(this.ink);
     this.bus.emit('player_respawned', { x: this.checkpoint.x, y: this.checkpoint.y });
+  }
+
+  /**
+   * Défaite (PV à 0, contact ennemi/boss) : retour au dernier encrier, PV et
+   * encre refaits à neuf — comme R, en plus sévère. Retour de playtest
+   * 2026-07-22 : il n'existait avant aucune condition d'échec.
+   */
+  private handleDefeat(): void {
+    this.respawn();
+    this.player = { ...this.player, health: PLAYER.maxHealth };
+    this.toast('Trop délavé, le manuscrit te ramène à l\'encrier.');
   }
 
   // ---------- Interactions ----------
@@ -907,6 +1002,20 @@ export class Game {
       this.burst(fragment.x + fragment.width / 2, fragment.y + fragment.height / 2, 16, PALETTE.unwritten, 50);
       this.bus.emit('flag_set', { flag, value: true });
     }
+    for (const potion of this.room.objectsOfType('potion')) {
+      if (this.collectedObjects.has(potion.id) || !this.playerOverlaps(potion)) continue;
+      const flag = potion.properties['flag'];
+      if (typeof flag !== 'string') continue;
+      this.collectedObjects.add(potion.id);
+      this.storyFlags[flag] = true;
+      this.player = {
+        ...this.player,
+        health: Math.min(PLAYER.maxHealth, this.player.health + PLAYER.maxHealth * PLAYER.healPotionFraction),
+      };
+      this.burst(potion.x + potion.width / 2, potion.y + potion.height / 2, 14, PALETTE.danger, 55);
+      this.bus.emit('flag_set', { flag, value: true });
+      this.toast('Fiole d\'encre rouge bue : PV restaurés.');
+    }
   }
 
   private handleInteract(): void {
@@ -936,32 +1045,36 @@ export class Game {
     }
   }
 
-  private checkExit(): void {
-    if (this.exitReached) return;
-    const exit = this.room.objectsOfType('exit').find((o) => this.playerOverlaps(o));
-    if (exit === undefined) return;
-    this.exitReached = true;
-    const ending = exit.properties['ending'];
-    const kind = typeof ending === 'string' ? ending : 'point';
+  /**
+   * Marque le chapitre 1 comme achevé, avec l'issue déduite des flags déjà
+   * posés par le joueur (raturer « jamais » et/ou combler le blanc ▢).
+   * Retour de playtest 2026-07-22 : il n'y a plus de sortie séparée à
+   * toucher (les deux "fausses portes" qui ne menaient nulle part sont
+   * supprimées) — atteindre la vraie porte, au bout du niveau, EST la fin.
+   */
+  private finalizeChapter1(): void {
+    if (this.storyFlags['chapitre1_fini'] === true) return;
+    const kind = this.storyFlags['rature_jamais'] === true ? 'rature' : 'point';
     this.storyFlags['chapitre1_fini'] = true;
     this.bus.emit('chapter_ended', { ending: kind });
-    this.persist();
     if (kind === 'rature') {
-      this.toast('Tu quittes la Marge en la raturant. Un vide s\'ouvre — la suite en Phase 2.');
+      this.toast('Tu quittes la Marge en la raturant. Un vide s\'ouvre, la suite arrive en Phase 2.');
     } else {
-      this.toast('Tu quittes la Marge en t\'y écrivant. La phrase s\'achève — la suite en Phase 2.');
+      this.toast('Tu quittes la Marge en t\'y écrivant. La phrase s\'achève, la suite arrive en Phase 2.');
     }
   }
 
   /**
-   * Portes entre salles (Phase 2, D13) : distinctes des `exit` de fin de
-   * chapitre. `doorCooldown` (posé par `loadRoom`) empêche un aller-retour
-   * immédiat si le point d'arrivée chevauchait la porte de destination.
+   * Portes entre salles (Phase 2, D13). `doorCooldown` (posé par `loadRoom`)
+   * empêche un aller-retour immédiat si le point d'arrivée chevauchait la
+   * porte de destination. Une porte à `endsChapter` termine d'abord le
+   * chapitre correspondant (voir `finalizeChapter1`) avant de transiter.
    */
   private checkDoors(): void {
     if (this.doorCooldown > 0) return;
     const door = this.room.objectsOfType('door').find((o) => this.playerOverlaps(o));
     if (door === undefined) return;
+    if (door.properties['endsChapter'] === 'chapitre1') this.finalizeChapter1();
     const targetRoom = door.properties['targetRoom'];
     const targetX = door.properties['targetX'];
     const targetY = door.properties['targetY'];
@@ -971,8 +1084,9 @@ export class Game {
     this.persist();
   }
 
+  /** Met un message en file plutôt que de l'afficher tout de suite : `update` les fait défiler avec un écart mini. */
   private toast(text: string): void {
-    this.toasts.push({ text, ttl: TOAST_SECONDS });
+    this.toastQueue.push(text);
   }
 
   // ---------- Rendu ----------
@@ -982,13 +1096,14 @@ export class Game {
     ctx.translate(-this.camera.x, -this.camera.y);
 
     ctx.drawImage(this.paper, 0, 0);
+    this.renderStoryDecor(ctx);
+    this.renderBossArenaDecor(ctx);
     this.renderMotes(ctx);
     this.renderSlabs(ctx);
     this.renderFiligrane(ctx);
     this.renderInk(ctx);
     this.renderCanon(ctx);
     this.renderBrecheWalls(ctx);
-    this.renderWallHints(ctx);
     this.renderObjects(ctx);
     this.renderEnemies(ctx);
     this.renderBoss(ctx);
@@ -1003,7 +1118,10 @@ export class Game {
       ctx,
       this.ink,
       this.player.health,
-      [...this.unlocked].map((id) => getAbility(id)?.word ?? id),
+      [...this.unlocked].map((id) => {
+        const def = getAbility(id);
+        return { word: def?.word ?? id, control: def?.control ?? '' };
+      }),
     );
     drawToasts(ctx, this.toasts);
 
@@ -1011,6 +1129,116 @@ export class Game {
       const node = currentNode(this.dialogue.data, this.dialogue.state);
       if (node !== null) drawDialogueBox(ctx, node, this.dialogue.selected);
     }
+
+    if (this.mode === 'paused') {
+      drawPauseMenu(ctx, this.pauseView, this.pauseSelected, allAbilities(), this.unlocked);
+    }
+  }
+
+  /**
+   * Décor narratif en arrière-plan (un-line, esquisse au trait) : la Marge
+   * dit que le mot « resta enfermé [...] et n'en sortit jamais » — on dessine
+   * ce personnage derrière des barreaux, pile sous la barrière-canon
+   * « enfermé ». Tant qu'elle n'est pas raturée, la barrière (dessinée plus
+   * tard, par-dessus) la cache entièrement ; une fois raturée, l'esquisse
+   * reste seule et visible — idée validée avec Lucas (2026-07-22), une seule
+   * illustration statique pour l'instant (une variante par choix viendra plus
+   * tard, en étape 2). Spécifique à La Marge : chapitre_01 est un blockout
+   * sans narration (D13).
+   */
+  private renderStoryDecor(ctx: CanvasRenderingContext2D): void {
+    if (this.room.id !== 'marge_01') return;
+    const x = 14 * TILE_SIZE;
+    const y = 8 * TILE_SIZE;
+    const w = 32;
+    const h = 6 * TILE_SIZE;
+
+    ctx.save();
+    ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.4);
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+
+    // Barreaux verticaux.
+    for (let i = 1; i < 4; i++) {
+      const bx = x + (w * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(bx, y + 4);
+      ctx.lineTo(bx, y + h - 4);
+      ctx.stroke();
+    }
+
+    // Silhouette assise, genoux repliés, tête basse — un seul trait continu.
+    const cx = x + w / 2;
+    const cy = y + h - 18;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 11, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + 1, cy - 7);
+    ctx.quadraticCurveTo(cx - 6, cy - 2, cx - 5, cy + 6);
+    ctx.quadraticCurveTo(cx - 4, cy + 13, cx, cy + 12);
+    ctx.quadraticCurveTo(cx + 4, cy + 13, cx + 5, cy + 6);
+    ctx.quadraticCurveTo(cx + 6, cy - 2, cx - 1, cy - 7);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * Décor d'arrière-plan de l'arène du mi-boss (chapitre_01) : une grande
+   * main tenant une plume raturée — rappelle que la Coquille majuscule est
+   * la main de l'Auteur qui « corrige » le texte, sans ajouter de PNJ ni de
+   * texte (chapitre_01 reste un blockout mécanique, D13 : c'est une
+   * illustration, pas de la narration écrite). Idée validée avec Lucas
+   * (2026-07-22), même esprit que `renderStoryDecor` : un-line, fixe, teinte
+   * sépia à faible opacité pour rester lisiblement de l'arrière-plan.
+   */
+  private renderBossArenaDecor(ctx: CanvasRenderingContext2D): void {
+    if (this.room.id !== 'chapitre_01') return;
+    const cx = 62 * TILE_SIZE;
+    const cy = 92;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.3);
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Paume, vue de dos, arrondie.
+    ctx.beginPath();
+    ctx.moveTo(-26, 30);
+    ctx.quadraticCurveTo(-30, 4, -14, -6);
+    ctx.quadraticCurveTo(0, -14, 14, -6);
+    ctx.quadraticCurveTo(30, 4, 26, 30);
+    ctx.stroke();
+
+    // Doigts repliés autour de la hampe (4 courts traits courbes).
+    for (let i = -1.5; i <= 1.5; i += 1) {
+      ctx.beginPath();
+      ctx.moveTo(i * 9, -6);
+      ctx.quadraticCurveTo(i * 9 + 2, -16, i * 9 - 2, -22);
+      ctx.stroke();
+    }
+
+    // Plume tenue entre les doigts, hampe qui dépasse.
+    ctx.beginPath();
+    ctx.moveTo(-4, -18);
+    ctx.quadraticCurveTo(10, -34, 22, -52);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(14, -30);
+    ctx.quadraticCurveTo(20, -26, 24, -32);
+    ctx.stroke();
+
+    // Rature : un trait rouge en travers de la plume.
+    ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.45);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(0, -40);
+    ctx.lineTo(20, -22);
+    ctx.stroke();
+
+    ctx.restore();
   }
 
   private renderMotes(ctx: CanvasRenderingContext2D): void {
@@ -1100,17 +1328,34 @@ export class Game {
   private renderBrecheWalls(ctx: CanvasRenderingContext2D): void {
     for (const wall of this.brecheWalls) {
       if (this.collectedObjects.has(wall.id)) continue;
-      if (!hasAbility(this.unlocked, 'breche')) continue;
-      this.renderCanonHint(ctx, wall, 'clic droit : brèche');
+      // Fissure toujours visible (pas seulement à portée) : sans elle, le mur
+      // était indiscernable d'un mur normal — retour de playtest 2026-07-22.
+      this.renderCrack(ctx, wall);
+      if (hasAbility(this.unlocked, 'breche')) {
+        this.renderCanonHint(ctx, wall, 'clic droit : brèche');
+      }
     }
   }
 
-  /** Murs ANCRE : simple indice mécanique (pas de mot-loi, salle sans narration). */
-  private renderWallHints(ctx: CanvasRenderingContext2D): void {
-    if (!hasAbility(this.unlocked, 'ancre')) return;
-    for (const hint of this.room.objectsOfType('wall_hint')) {
-      this.renderCanonHint(ctx, hint, 'ANCRE : grimpe');
+  /** Lézarde en zigzag, sur toute la hauteur de l'objet ; forme stable (seed = id). */
+  private renderCrack(ctx: CanvasRenderingContext2D, obj: RoomObject): void {
+    const seed = obj.id * 97;
+    const rand = (i: number) => {
+      const v = Math.sin(seed + i * 12.9898) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    const cx = obj.x + obj.width / 2;
+    const steps = Math.max(3, Math.round(obj.height / 18));
+    ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.55);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx + (rand(0) - 0.5) * obj.width * 0.4, obj.y + 2);
+    for (let i = 1; i <= steps; i++) {
+      const y = obj.y + (obj.height * i) / steps;
+      const x = cx + (rand(i) - 0.5) * obj.width * 0.7;
+      ctx.lineTo(x, y);
     }
+    ctx.stroke();
   }
 
   /** Mots-loi : barrières solides (à raturer) et blancs ▢ (à combler). */
@@ -1146,7 +1391,10 @@ export class Game {
 
     // Blancs ▢ non comblés : cadre pointillé pulsant, invite à écrire dedans.
     for (const blank of this.canonBlanks) {
-      if (this.collectedObjects.has(blank.id)) continue;
+      if (this.collectedObjects.has(blank.id)) {
+        this.renderWrittenSelf(ctx, blank);
+        continue;
+      }
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 3);
       ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.4 + pulse * 0.4);
       ctx.lineWidth = 1.2;
@@ -1163,6 +1411,41 @@ export class Game {
       ctx.textBaseline = 'alphabetic';
       this.renderCanonHint(ctx, blank, 'trace ton encre ici');
     }
+  }
+
+  /**
+   * Une fois le blanc ▢ comblé d'encre, une silhouette debout, bras ouverts,
+   * se tient là où était le vide : « Tu t'écris dans la phrase » (D11) rendu
+   * visible, pas seulement raconté. Idée validée avec Lucas (2026-07-22) ;
+   * teinte « non-écrit » (et non encre) pour qu'elle se lise comme un ajout
+   * au texte plutôt que comme un obstacle.
+   */
+  private renderWrittenSelf(ctx: CanvasRenderingContext2D, blank: RoomObject): void {
+    const cx = blank.x + blank.width / 2;
+    const groundY = blank.y;
+    ctx.save();
+    ctx.translate(cx, groundY);
+    ctx.strokeStyle = hexAlpha(PALETTE.unwritten, 0.8);
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = PALETTE.unwritten;
+    ctx.shadowBlur = 5;
+    // Tête
+    ctx.beginPath();
+    ctx.arc(0, -18, 2.6, 0, Math.PI * 2);
+    ctx.stroke();
+    // Tronc + bras grands ouverts + jambes, en un seul trait.
+    ctx.beginPath();
+    ctx.moveTo(-8, -10);
+    ctx.lineTo(8, -10);
+    ctx.moveTo(0, -15);
+    ctx.lineTo(0, -3);
+    ctx.moveTo(0, -3);
+    ctx.lineTo(-4, 0);
+    ctx.moveTo(0, -3);
+    ctx.lineTo(4, 0);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** Étiquette d'action au-dessus d'un mot-loi, seulement quand il est à portée. */
@@ -1192,6 +1475,9 @@ export class Game {
    * Le texte s'assombrit une fois que le joueur a commencé à réécrire.
    */
   private drawSentenceBanner(ctx: CanvasRenderingContext2D): void {
+    // La phrase-loi (D11) est spécifique à La Marge — sans ce garde-fou, elle
+    // restait affichée après une porte vers chapitre_01 (retour playtest 07-22).
+    if (this.room.id !== DEFAULT_ROOM_ID) return;
     const text = resolveSentence(this.sentenceVariants, this.storyFlags);
     if (text === '') return;
     const rewritten =
@@ -1215,11 +1501,82 @@ export class Game {
     ctx.fillText(text, cx, y);
   }
 
+  /**
+   * Icône vectorielle d'un mot-pouvoir (au lieu d'épeler le mot en toutes
+   * lettres — retour de playtest 2026-07-22 : les mots flottants n'étaient
+   * pas clairs). Petits pictogrammes cohérents avec le thème : plume pour
+   * ÉCRIRE, chevrons pour AILES, etc.
+   */
+  private renderAbilityIcon(ctx: CanvasRenderingContext2D, ability: string, cx: number, cy: number): void {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = PALETTE.danger;
+    ctx.strokeStyle = PALETTE.danger;
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    switch (ability) {
+      case 'ecrire':
+        // Plume d'oie : hampe fine, barbe courbe, pointe en biais.
+        ctx.rotate(-0.5);
+        ctx.beginPath();
+        ctx.moveTo(0, -9);
+        ctx.quadraticCurveTo(6, -6, 5, 2);
+        ctx.quadraticCurveTo(4, 7, 0, 9);
+        ctx.quadraticCurveTo(2, 3, -1, -2);
+        ctx.quadraticCurveTo(-3, -6, 0, -9);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(0, 9);
+        ctx.lineTo(-3, 12);
+        ctx.stroke();
+        break;
+      case 'breche':
+        // Fissure en zigzag dans un cadre : le mur qui se fend.
+        ctx.beginPath();
+        ctx.roundRect(-8, -8, 16, 16, 3);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-4, -7);
+        ctx.lineTo(1, -1);
+        ctx.lineTo(-2, 2);
+        ctx.lineTo(4, 7);
+        ctx.stroke();
+        break;
+      case 'hate':
+        // Traînée de vitesse : traits obliques parallèles.
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-8, i * 4 + 4);
+          ctx.lineTo(4, i * 4 - 2);
+          ctx.stroke();
+        }
+        break;
+      case 'ales':
+        // Double chevron : double saut / envol (AILES).
+        ctx.beginPath();
+        ctx.moveTo(-7, 2);
+        ctx.lineTo(0, -5);
+        ctx.lineTo(7, 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-7, 8);
+        ctx.lineTo(0, 1);
+        ctx.lineTo(7, 8);
+        ctx.stroke();
+        break;
+      default:
+        ctx.font = 'italic bold 12px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('?', 0, 4);
+    }
+    ctx.restore();
+  }
+
   private renderObjects(ctx: CanvasRenderingContext2D): void {
     for (const word of this.room.objectsOfType('word')) {
       if (this.collectedObjects.has(word.id)) continue;
       const ability = word.properties['ability'];
-      const def = typeof ability === 'string' ? getAbility(ability) : null;
       const cx = word.x + word.width / 2;
       const cy = word.y + word.height / 2 + Math.sin(this.time * 2.2) * 3;
       ctx.fillStyle = hexAlpha(PALETTE.danger, 0.08 + 0.04 * Math.sin(this.time * 3));
@@ -1228,16 +1585,18 @@ export class Game {
       ctx.fill();
       ctx.shadowColor = PALETTE.danger;
       ctx.shadowBlur = 10;
-      ctx.fillStyle = PALETTE.danger;
-      ctx.font = 'italic bold 12px Georgia, serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(def?.word ?? '???', cx, cy);
+      this.renderAbilityIcon(ctx, typeof ability === 'string' ? ability : '', cx, cy - 3);
       ctx.shadowBlur = 0;
     }
 
     for (const fragment of this.room.objectsOfType('fragment')) {
       if (this.collectedObjects.has(fragment.id)) continue;
       this.renderFragment(ctx, fragment);
+    }
+
+    for (const potion of this.room.objectsOfType('potion')) {
+      if (this.collectedObjects.has(potion.id)) continue;
+      this.renderPotion(ctx, potion);
     }
 
     for (const inkwell of this.room.objectsOfType('inkwell')) {
@@ -1265,25 +1624,7 @@ export class Game {
       this.renderInteractHint(ctx, inkwell);
     }
 
-    for (const exit of this.room.objectsOfType('exit')) {
-      ctx.shadowColor = RENDERING.shadowColor;
-      ctx.shadowBlur = RENDERING.shadowBlur;
-      ctx.fillStyle = PALETTE.sepia;
-      ctx.beginPath();
-      ctx.roundRect(exit.x - 2, exit.y, exit.width + 4, exit.height, [8, 8, 0, 0]);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      const doorway = ctx.createLinearGradient(exit.x, exit.y, exit.x, exit.y + exit.height);
-      doorway.addColorStop(0, hexAlpha(PALETTE.ink, 0.85));
-      doorway.addColorStop(1, hexAlpha(PALETTE.ink, 0.5));
-      ctx.fillStyle = doorway;
-      ctx.beginPath();
-      ctx.roundRect(exit.x + 1, exit.y + 3, exit.width - 2, exit.height - 3, [6, 6, 0, 0]);
-      ctx.fill();
-    }
-
-    // Portes entre salles : même silhouette que les sorties, teinte "non-écrit"
-    // pour les distinguer visuellement des fins de chapitre.
+    // Portes entre salles : dalle pleine + baie en dégradé "non-écrit".
     for (const door of this.room.objectsOfType('door')) {
       ctx.shadowColor = RENDERING.shadowColor;
       ctx.shadowBlur = RENDERING.shadowBlur;
@@ -1366,6 +1707,46 @@ export class Game {
       ctx.arc(cx + 5, cy - 6, 1.2, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /**
+   * Fiole d'encre rouge (usage unique, +PV) : goutte d'encre en forme de
+   * cœur, teinte danger — se distingue du fragment (teinte non-écrit) pour
+   * qu'on comprenne au premier coup d'œil qu'elle sert à la survie, pas à la
+   * narration (retour de playtest 2026-07-22 : les ramassages n'étaient pas
+   * assez lisibles).
+   */
+  private renderPotion(ctx: CanvasRenderingContext2D, potion: RoomObject): void {
+    const cx = potion.x + potion.width / 2;
+    const cy = potion.y + potion.height / 2 + Math.sin(this.time * 1.8) * 2;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 3);
+
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
+    halo.addColorStop(0, hexAlpha(PALETTE.danger, 0.45));
+    halo.addColorStop(1, hexAlpha(PALETTE.danger, 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.4 + pulse * 0.4);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7 + pulse * 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Petit cœur (dessin vectoriel simple), pour lire "vie" au premier coup d'œil.
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = PALETTE.danger;
+    ctx.shadowColor = PALETTE.danger;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(0, 4);
+    ctx.bezierCurveTo(-6, -2, -4, -7, 0, -3);
+    ctx.bezierCurveTo(4, -7, 6, -2, 0, 4);
+    ctx.fill();
+    ctx.restore();
   }
 
   private renderInteractHint(ctx: CanvasRenderingContext2D, obj: RoomObject): void {
@@ -1455,6 +1836,24 @@ export class Game {
       ctx.fillStyle = i < boss.health ? PALETTE.danger : hexAlpha(PALETTE.sepia, 0.3);
       ctx.beginPath();
       ctx.arc(cx - pipsWidth / 2 + i * 8 + 4, boss.body.y - 8, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Bulles d'encre en vol : lentes et esquivables, teinte danger comme les
+    // autres projectiles/menaces du boss.
+    for (const p of boss.projectiles) {
+      const wobble = Math.sin(this.time * 6 + p.x * 0.1) * 1.2;
+      ctx.fillStyle = hexAlpha(PALETTE.danger, 0.35);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + wobble, BOSS.projectileRadius + 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = PALETTE.danger;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y + wobble, BOSS.projectileRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.5);
+      ctx.beginPath();
+      ctx.arc(p.x - 1.5, p.y + wobble - 1.5, 1.2, 0, Math.PI * 2);
       ctx.fill();
     }
   }

@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { SolidQuery } from '../src/engine/physics';
-import { DASH, WALL_CLIMB } from '../src/game/config';
+import { DASH } from '../src/game/config';
 import { stepPlayer, type MoveIntents, type PlayerState } from '../src/game/player/controller';
 
 const empty: SolidQuery = () => false;
-const wallOnRightAt10: SolidQuery = (tx) => tx >= 10;
 
 function player(partial: Partial<PlayerState> = {}): PlayerState {
   return {
@@ -15,7 +14,6 @@ function player(partial: Partial<PlayerState> = {}): PlayerState {
     dashTimer: 0,
     dashCooldown: 0,
     airJumpsUsed: 0,
-    wallGrab: false,
     ...partial,
   };
 }
@@ -24,8 +22,6 @@ function intents(partial: Partial<MoveIntents> = {}): MoveIntents {
   return {
     left: false,
     right: false,
-    up: false,
-    down: false,
     jumpPressed: false,
     jumpHeld: false,
     dashPressed: false,
@@ -35,7 +31,6 @@ function intents(partial: Partial<MoveIntents> = {}): MoveIntents {
 
 const NONE = new Set<string>();
 const HATE = new Set(['hate']);
-const ANCRE = new Set(['ancre']);
 const ALES = new Set(['ales']);
 
 describe('stepPlayer — HÂTE (dash)', () => {
@@ -68,7 +63,7 @@ describe('stepPlayer — HÂTE (dash)', () => {
   });
 });
 
-describe('stepPlayer — ALES (double saut / vol plané)', () => {
+describe('stepPlayer — AILES (double saut / vol plané)', () => {
   it('un second saut en l\'air est possible si débloqué', () => {
     const p = player({ grounded: false, airJumpsUsed: 0, body: { x: 0, y: 0, w: 12, h: 22, vx: 0, vy: 80 } });
     const next = stepPlayer(p, intents({ jumpPressed: true }), empty, 1 / 60, ALES);
@@ -95,32 +90,5 @@ describe('stepPlayer — ALES (double saut / vol plané)', () => {
     const p = player({ grounded: true, airJumpsUsed: 1 });
     const next = stepPlayer(p, intents(), empty, 1 / 60, ALES);
     expect(next.airJumpsUsed).toBe(0);
-  });
-});
-
-describe('stepPlayer — ANCRE (agrippement mural)', () => {
-  it('s\'accroche à un mur en l\'air si débloqué et qu\'on appuie vers lui', () => {
-    const p = player({ grounded: false, body: { x: 10 * 16 - 12, y: 50, w: 12, h: 22, vx: 0, vy: 100 } });
-    const next = stepPlayer(p, intents({ right: true }), wallOnRightAt10, 1 / 60, ANCRE);
-    expect(next.wallGrab).toBe(true);
-    expect(next.body.vx).toBe(0);
-  });
-
-  it('ne s\'accroche pas sans ANCRE débloqué', () => {
-    const p = player({ grounded: false, body: { x: 10 * 16 - 12, y: 50, w: 12, h: 22, vx: 0, vy: 100 } });
-    const next = stepPlayer(p, intents({ right: true }), wallOnRightAt10, 1 / 60, NONE);
-    expect(next.wallGrab).toBe(false);
-  });
-
-  it('grimpe vers le haut quand on maintient "up" accroché au mur', () => {
-    const p = player({ grounded: false, body: { x: 10 * 16 - 12, y: 50, w: 12, h: 22, vx: 0, vy: 100 } });
-    const next = stepPlayer(p, intents({ right: true, up: true }), wallOnRightAt10, 1 / 60, ANCRE);
-    expect(next.body.vy).toBe(-WALL_CLIMB.climbSpeed);
-  });
-
-  it('glisse lentement sans appui haut/bas', () => {
-    const p = player({ grounded: false, body: { x: 10 * 16 - 12, y: 50, w: 12, h: 22, vx: 0, vy: 100 } });
-    const next = stepPlayer(p, intents({ right: true }), wallOnRightAt10, 1 / 60, ANCRE);
-    expect(next.body.vy).toBe(WALL_CLIMB.slideSpeed);
   });
 });

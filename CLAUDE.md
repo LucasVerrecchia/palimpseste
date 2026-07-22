@@ -65,10 +65,87 @@ danger #C1362B, non-écrit #CFE3E8.
     `chapitre_01` (blockout, **sans PNJ ni texte narratif** — décision
     délibérée, la narration se décide avec Lucas) enchaîne ANCRE → ALES →
     BRÈCHE → Coquille + Rature → mi-boss.
-  - 124 tests Vitest, `tsc`/`eslint`/`vite build` verts. Playtest headless :
-    la porte + le ramassage ÉCRIRE confirmés visuellement (voir capture de
-    session) ; la traversée complète de `chapitre_01` (mur ANCRE, gouffre
-    ALES, brèche, combat de mi-boss) **n'a pas pu être jouée à la souris en
-    automatique** (précision de clic + caméra mobile) — **en attente du
-    playtest manuel de Lucas** avant de considérer la Phase 2 validée.
+  - 124 tests Vitest, `tsc`/`eslint`/`vite build` verts.
+- **Playtest de Lucas sur chapitre_01 (2026-07-22, vidéo fournie)** — 3 retours,
+  tous corrigés :
+  - Porte vers chapitre_01 déplacée en fin de parcours (avant le barrage
+    « jamais ») + verrouillée par un nouveau champ d'objet Tiled
+    `requiresFlag` (`chapitre1_fini`) tant que le chapitre n'est pas terminé.
+  - Mur ANCRE **infranchissable** : oubli des mots-pouvoir BRÈCHE/HÂTE/ANCRE/
+    ALES dans `chapitre_01` (aucune façon de les débloquer). Ajoutés, chacun
+    avant son obstacle.
+  - **Délavage retiré** (amende la « règle sombre » de D10) : à sec, on ne
+    peut plus tracer du tout (bloqué + toast), on ne pioche plus dans les PV.
+    `ink.ts` simplifié (`canAfford`/`spendInk`).
+  - Bonus trouvé en creusant le retour : le bandeau de la phrase-loi (D11)
+    restait affiché dans `chapitre_01` — corrigé (spécifique à La Marge).
+  - 125 tests Vitest, `tsc`/`eslint`/`vite build` verts.
+- **Deuxième playtest (2026-07-22)** — retours supplémentaires, tous corrigés
+  sauf le dernier (narratif, en attente de décision) :
+  - Condition d'échec ajoutée : 0 PV → retour au dernier encrier (PV/encre
+    refaits à neuf), `Game.handleDefeat()`. Les planchers à 1 PV (reliquat du
+    délavage) ont été retirés des dégâts ennemis/boss.
+  - Sorties de fin de chapitre : devenues de vrais murs scellés
+    (`Room.registerWall`), plus des portes ouvrables qui ne menaient nulle
+    part.
+  - Mots-pouvoir : pictogrammes (plume, fissure, traînée, ancre, chevrons) au
+    lieu d'épeler le mot — plus lisible et plus cohérent avec l'histoire.
+  - Mur BRÈCHE : lézarde toujours visible (pas seulement à portée) pour se
+    distinguer d'un mur normal.
+  - Indice de combat pour le mi-boss + toast de fin de contenu après sa
+    défaite (répond à « comment on tue le boss / on finit le niveau 2 »).
+  - 127 tests, `tsc`/`eslint`/`vite build` verts.
+  - **Narratif (pas encore codé)** : Lucas veut que le chapitre 2 rende
+    visible le choix du chapitre 1 (RATURE/POINT FINAL) et propose un nouveau
+    choix sur une nouvelle phrase-loi, en gardant les deux issues viables.
+    Pistes proposées, décision à valider avec lui avant d'implémenter.
+- **Troisième playtest (2026-07-22)** :
+  - Bug corrigé : dasher sur le mi-boss vulnérable infligeait aussi des
+    dégâts au joueur (incohérent).
+  - Commandes des pouvoirs affichées partout (toast de ramassage — qui était
+    câblé en dur sur ÉCRIRE, bug corrigé —, HUD, menu pause).
+  - Menu pause ajouté (Échap) : recommencer le niveau / voir les pouvoirs /
+    quitter.
+  - Retour narratif : la mécanique « mur à casser » proposée pour le
+    chapitre 2 fait doublon avec le chapitre 1. Lucas veut un **événement**
+    dans le niveau 2 dont l'issue change selon la déviation choisie, menant
+    au fragment de livre suivant puis au niveau suivant. Veut aussi un PNJ
+    qui explique HÂTE/ALES, une phrase du livre pour indiquer comment battre
+    le boss (narratif plutôt qu'un toast UI), et plus de décor/texte pour
+    renforcer l'impression d'être dans un livre. **Toujours pas codé** —
+    proposition en cours de discussion (voir prompts_logs, session 9/10).
+- **Quatrième round — polish visuel/UX (2026-07-22)**, retours de Lucas :
+  - ANCRE retiré (redondant : on pouvait déjà franchir son mur en s'y traçant
+    des plateformes d'encre) ; ALES renommé AILES.
+  - PV lisibles : pictogramme cœur + « PV » à côté de la jauge rouge.
+  - Arène du mi-boss agrandie ; fiole d'encre rouge ajoutée en hauteur
+    au-dessus (usage unique, restaure 50 % des PV max, `PLAYER.healPotionFraction`).
+  - Tirets « — » retirés de tous les textes visibles (tell d'IA générative,
+    retour explicite de Lucas) ; anti-spam des toasts (file d'attente avec
+    écart mini, `TOAST_STAGGER_SECONDS`, au lieu d'un empilement instantané).
+  - Décor narratif en arrière-plan (idées proposées et validées par Lucas
+    avant codage) : silhouette derrière des barreaux sous le mot-cage
+    « enfermé » (révélée une fois raturé), silhouette bras ouverts une fois
+    le blanc ▢ comblé, main tenant une plume raturée dans l'arène du mi-boss.
+    Un-line, palette existante, aucune n'ajoute de texte (chapitre_01 reste
+    sans narration, D13).
+  - 122 tests.
+- **Cinquième round (2026-07-22)** :
+  - Portes du chapitre 1 simplifiées : les deux "sorties" (`exit`), qui
+    ressemblaient à des portes sans effet, sont supprimées. Une seule porte,
+    tout au bout du parcours (après le barrage « jamais »), termine le
+    chapitre et transite vers chapitre_01 en un seul geste (propriété Tiled
+    `endsChapter`) ; l'issue (rature/point final) se déduit des flags déjà
+    posés par le joueur, plus besoin de `requiresFlag`.
+  - Encrier ajouté dans chapitre_01, avant l'arène du mi-boss.
+  - Bug du dash "vulnérable" enfin isolé à la racine : l'ancien garde-fou ne
+    couvrait que la frame du coup, alors que le dash reste actif plusieurs
+    frames au contact du boss pendant qu'il passe en "recover" — dasher ne
+    blesse désormais plus jamais le joueur (même règle que les ennemis
+    communs).
+  - IA du mi-boss (à la demande de Lucas) : patrouille réactive (vise le
+    joueur, tout en restant dans ses bornes) + tir de bulles d'encre lentes
+    et esquivables (`resolveProjectileHits`), même pattern fonctions pures
+    que le reste des ennemis (D12).
+  - 127 tests, `tsc`/`eslint`/`vite build` verts.
 - Phases 2b-4 : à venir (attendre validation humaine entre chaque étape).

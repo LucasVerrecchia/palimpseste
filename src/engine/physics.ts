@@ -160,19 +160,6 @@ export function isOnGround(body: Body, isSolid: SolidQuery, tileSize: number): b
   return anySolidInRow(isSolid, rowBelow, colMin, colMax);
 }
 
-/**
- * Le corps touche-t-il un mur solide sur son flanc gauche (-1) ou droit (+1) ?
- * Sonde 1 epsilon au-delà du bord, sur toute la hauteur du corps (pour ANCRE).
- */
-export function isTouchingWall(body: Body, isSolid: SolidQuery, tileSize: number, side: 1 | -1): boolean {
-  const [rowMin, rowMax] = spanRange(body.y, body.h, tileSize);
-  const col =
-    side > 0
-      ? Math.floor((body.x + body.w + EPS) / tileSize)
-      : Math.floor((body.x - EPS) / tileSize);
-  return anySolidInColumn(isSolid, col, rowMin, rowMax);
-}
-
 /** Chevauchement de deux rectangles (utilitaire pour triggers/pickups). */
 export function aabbOverlap(
   ax: number, ay: number, aw: number, ah: number,

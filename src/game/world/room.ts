@@ -165,7 +165,9 @@ export class Room {
       return false;
     }
     return (
-      !this.isGroundOrFiligraneSolid(tileX, tileY) && !this.hasInk(tileX, tileY) && !this.hasCanon(tileX, tileY)
+      !this.isGroundOrFiligraneSolid(tileX, tileY) &&
+      !this.hasInk(tileX, tileY) &&
+      !this.hasCanon(tileX, tileY)
     );
   }
 

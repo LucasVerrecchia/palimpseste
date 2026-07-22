@@ -120,3 +120,4 @@ describe('Room — murs BRÈCHE et filigrane', () => {
     expect(room.filigraneSlabs()).toEqual([{ x: 3, y: 0, w: 1, h: 1 }]);
   });
 });
+

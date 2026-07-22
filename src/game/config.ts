@@ -40,6 +40,8 @@ export const PLAYER = {
   width: 12,
   height: 22,
   maxHealth: 100,
+  /** Fraction des PV max rendue par une fiole d'encre rouge (usage unique). */
+  healPotionFraction: 0.5,
 } as const;
 
 /** HÂTE — dash horizontal (traînée d'encre). Rôle spec §6 : gaps ET combat. */
@@ -49,14 +51,7 @@ export const DASH = {
   cooldownSeconds: 0.5,
 } as const;
 
-/** ANCRE — agrippe/grimpe les murs (jeu de mots encre/ancre). */
-export const WALL_CLIMB = {
-  climbSpeed: 60,
-  /** Vitesse de glissade quand on s'accroche sans appuyer haut/bas. */
-  slideSpeed: 40,
-} as const;
-
-/** ALES — double saut / vol plané. */
+/** AILES — double saut / vol plané. */
 export const AIR_JUMP = {
   maxAirJumps: 1,
   jumpVelocity: -300,
@@ -100,7 +95,10 @@ export const ENEMY = {
 /**
  * Mi-boss — la Coquille majuscule (spec §6). Cycle de phases télégraphiées :
  * patrouille → charge (télégraphe) → vulnérable (seule fenêtre où HÂTE fait
- * mal) → récupération → patrouille. Évite un combat "au hasard".
+ * mal) → récupération → patrouille. Évite un combat "au hasard". Pendant la
+ * patrouille, le boss avance vers le joueur (IA simple mais réactive, plutôt
+ * qu'un aller-retour fixe) et lui tire dessus des bulles d'encre lentes,
+ * esquivables — un deuxième type de menace en plus du contact.
  */
 export const BOSS = {
   width: 20,
@@ -112,6 +110,14 @@ export const BOSS = {
   vulnerableSeconds: 1,
   recoverSeconds: 1.4,
   contactDamage: 12,
+  /** Délai entre deux bulles d'encre tirées (secondes). */
+  rangedCooldownSeconds: 2.2,
+  /** Vitesse horizontale de la bulle (px/s) — volontairement lente : esquivable. */
+  projectileSpeed: 85,
+  projectileRadius: 5,
+  /** Durée de vie d'une bulle avant qu'elle s'estompe (secondes). */
+  projectileLifeSeconds: 3.5,
+  projectileDamage: 8,
 } as const;
 
 /**
@@ -126,6 +132,14 @@ export const AUTO_RESUME: boolean = false;
 
 /** Durée d'affichage des messages éphémères (secondes). */
 export const TOAST_SECONDS = 3;
+
+/**
+ * Écart mini entre deux messages éphémères qui apparaissent (secondes).
+ * Anti-spam visuel : sans ça, plusieurs événements simultanés (ex. victoire
+ * du mi-boss) empilaient leurs messages d'un coup — retour de playtest
+ * 2026-07-22 ("ça peut vite faire brouillon").
+ */
+export const TOAST_STAGGER_SECONDS = 0.6;
 
 /** Direction artistique « manuscrit moderne » (décision D9, 2026-07-06). */
 export const RENDERING = {

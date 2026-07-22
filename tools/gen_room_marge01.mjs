@@ -83,18 +83,6 @@ const objects = [
     ],
   },
 
-  // Porte vers le Chapitre Premier (blockout Phase 2, machinerie uniquement :
-  // aucun texte narratif ici, cf. décision de calibrage Phase 2). Placée après
-  // la rature d'« enfermé » — on ne peut l'atteindre qu'après ce premier geste.
-  {
-    id: id(), name: 'porte_chapitre1', type: 'door', x: 20 * TILE, y: 192, width: 16, height: 32,
-    properties: [
-      prop('targetRoom', 'string', 'chapitre_01'),
-      prop('targetX', 'int', 64),
-      prop('targetY', 'int', 202),
-    ],
-  },
-
   // Encrier / point de sauvegarde, avant la zone du choix.
   { id: id(), name: 'encrier_marge', type: 'inkwell', x: 28 * TILE, y: 200, width: 16, height: 24 },
 
@@ -128,16 +116,22 @@ const objects = [
     ],
   },
 
-  // ── Deux sorties = les deux fins en miniature ───────────────────────────
-  // POINT FINAL : en haut, au bout de la passerelle (accessible après le ▢).
+  // Porte vers le Chapitre Premier, à la toute fin du niveau (au-delà du
+  // barrage « jamais » — le franchir, raturé ou contourné en s'y traçant des
+  // plateformes d'encre, est le seul moyen physique d'arriver jusqu'ici).
+  // Retour de playtest 2026-07-22 : les deux anciennes "sorties" (objets
+  // `exit`) ressemblaient à des portes qui ne menaient nulle part —
+  // supprimées. Cette porte est maintenant la seule, et c'est elle qui
+  // termine le chapitre (`endsChapter`) juste avant de faire transiter vers
+  // chapitre_01 : plus besoin de `requiresFlag`, l'atteindre EST la fin.
   {
-    id: id(), name: 'sortie_point', type: 'exit', x: 46 * TILE, y: 6 * TILE, width: 16, height: 48,
-    properties: [prop('ending', 'string', 'point')],
-  },
-  // RATURE : en bas à droite, derrière le barrage « jamais ».
-  {
-    id: id(), name: 'sortie_rature', type: 'exit', x: 60 * TILE, y: 11 * TILE, width: 16, height: 48,
-    properties: [prop('ending', 'string', 'rature')],
+    id: id(), name: 'porte_chapitre1', type: 'door', x: 60 * TILE, y: 192, width: 16, height: 32,
+    properties: [
+      prop('targetRoom', 'string', 'chapitre_01'),
+      prop('targetX', 'int', 64),
+      prop('targetY', 'int', 202),
+      prop('endsChapter', 'string', 'chapitre1'),
+    ],
   },
 ];
 

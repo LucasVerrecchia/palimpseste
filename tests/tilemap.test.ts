@@ -168,18 +168,15 @@ describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)',
     }
   });
 
-  it('contient les objets requis, dont les mots-loi et deux sorties', () => {
+  it('contient les objets requis, dont les mots-loi', () => {
     const types = new Set(map.objects.map((o) => o.type));
-    for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'exit', 'canon']) {
+    for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'door', 'canon']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
     expect(types.has('unwritten')).toBe(false); // plus de plateformes pré-placées
-
-    // Deux sorties = les deux fins en miniature (rature / point final).
-    const endings = map.objects
-      .filter((o) => o.type === 'exit')
-      .map((o) => o.properties['ending']);
-    expect(new Set(endings)).toEqual(new Set(['rature', 'point']));
+    // Plus de sorties séparées (retour de playtest 2026-07-22) : une seule
+    // porte, en fin de parcours, termine le chapitre (voir plus bas).
+    expect(types.has('exit')).toBe(false);
 
     // Les obstacles SONT des mots-loi : 2 barrières (enfermé, jamais) + 1 blanc.
     const canon = map.objects.filter((o) => o.type === 'canon');
@@ -223,11 +220,14 @@ describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)',
     expect(jamais?.properties['leaning']).toBe(-1);
   });
 
-  it('porte vers chapitre_01, placée après la cage « enfermé »', () => {
+  it('porte vers chapitre_01, seule et à la toute fin du niveau, termine le chapitre', () => {
     const door = map.objects.find((o) => o.type === 'door');
     expect(door).toBeDefined();
     expect(door?.properties['targetRoom']).toBe('chapitre_01');
-    expect(door?.x).toBeGreaterThan(15 * 16); // au-delà de la cage (colonnes 14-15)
+    // Au-delà du barrage "jamais" (colonnes 50-51) : l'atteindre est le seul
+    // moyen physique de finir le niveau, quelle que soit la route choisie.
+    expect(door?.x).toBeGreaterThan(51 * 16);
+    expect(door?.properties['endsChapter']).toBe('chapitre1');
   });
 });
 
@@ -243,18 +243,18 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(map.filigrane).not.toBeNull();
   });
 
-  it('le mur ANCRE bloque le sol mais laisse de la place pour passer par-dessus', () => {
-    const wall = map.objects.find((o) => o.name === 'mur_ancre');
-    expect(wall).toBeDefined();
-    const col = Math.floor((wall?.x ?? 0) / 16);
+  it('le mur du premier obstacle bloque le sol mais laisse de la place pour passer par-dessus', () => {
+    // Colonne 14 (voir tools/gen_room_chapitre01.mjs) : pas de mot-pouvoir associé
+    // depuis le retrait d'ANCRE — se franchit en traçant des plateformes d'encre.
+    const col = 14;
     // Solide du sol jusqu'à une bonne hauteur...
     for (let ty = 6; ty <= 16; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
-    // ...mais pas jusqu'au plafond : on peut grimper puis passer par-dessus.
+    // ...mais pas jusqu'au plafond : on peut s'y tracer un escalier et passer par-dessus.
     expect(gidAt(map, col, 1)).toBe(0);
     expect(gidAt(map, col, 2)).toBe(0);
   });
 
-  it('le gouffre ALES coupe le sol sur plusieurs tuiles', () => {
+  it('le gouffre AILES coupe le sol sur plusieurs tuiles', () => {
     let gapWidth = 0;
     for (let tx = 1; tx < map.widthTiles - 1; tx++) {
       if (gidAt(map, tx, 14) === 0 && gidAt(map, tx, 16) === 0) gapWidth++;
@@ -276,6 +276,40 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(map.objects.some((o) => o.type === 'boss')).toBe(true);
     expect(map.objects.some((o) => o.type === 'npc')).toBe(false);
     expect(map.objects.some((o) => o.type === 'canon')).toBe(false);
+  });
+
+  it('offre un encrier avant l\'arène du mi-boss (retour de playtest 2026-07-22)', () => {
+    const inkwell = map.objects.find((o) => o.type === 'inkwell');
+    const boss = map.objects.find((o) => o.type === 'boss');
+    expect(inkwell).toBeDefined();
+    expect(inkwell?.x ?? 0).toBeLessThan(boss?.x ?? 0);
+  });
+
+  it('offre un mot-pouvoir pour chacun des 3 pouvoirs restants, avant son obstacle', () => {
+    const words = map.objects.filter((o) => o.type === 'word');
+    const abilities = words.map((w) => w.properties['ability']);
+    expect(new Set(abilities)).toEqual(new Set(['hate', 'ales', 'breche']));
+
+    const xOf = (ability: string) => words.find((w) => w.properties['ability'] === ability)?.x ?? -1;
+    const gouffreCol = 26;
+    const brecheCol = Math.floor((map.objects.find((o) => o.type === 'breche_wall')?.x ?? 0) / 16);
+    expect(xOf('ales')).toBeLessThan(gouffreCol * 16);
+    expect(xOf('breche')).toBeLessThan(brecheCol * 16);
+  });
+
+  it('offre une fiole de PV à usage unique, en hauteur au-dessus de l\'arène du boss', () => {
+    const potion = map.objects.find((o) => o.type === 'potion');
+    const boss = map.objects.find((o) => o.type === 'boss');
+    expect(potion).toBeDefined();
+    expect(potion?.properties['flag']).toBeTypeOf('string');
+    // Posée en hauteur (au-dessus du sol) plutôt qu'accessible en marchant.
+    expect(potion?.y ?? 0).toBeLessThan((boss?.y ?? 0));
+  });
+
+  it('laisse assez d\'espace entre la BRÈCHE et le mi-boss (arène, pas un couloir)', () => {
+    const wall = map.objects.find((o) => o.type === 'breche_wall');
+    const boss = map.objects.find((o) => o.type === 'boss');
+    expect((boss?.x ?? 0) - (wall?.x ?? 0)).toBeGreaterThan(18 * 16);
   });
 
   it('la porte de retour vise marge_01 loin de sa propre case (anti aller-retour)', () => {
