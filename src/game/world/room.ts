@@ -4,6 +4,7 @@
  * aux tuiles statiques pour la requête de solidité de la physique.
  */
 import {
+  filigraneGidAt,
   gidAt,
   mergeSolidTiles,
   type ParsedMap,
@@ -29,6 +30,15 @@ export class Room {
    * "tx,ty" → id de l'objet-canon, pour pouvoir effacer un mot d'un bloc.
    */
   private readonly canon = new Map<string, number>();
+  /**
+   * Murs BRÈCHE : tuiles "ground" spécifiquement marquées comme effaçables
+   * par ce pouvoir (contrairement à un mur naturel, permanent). Clés "tx,ty"
+   * → id de l'objet-mur (décision D11-bis, Phase 2). Une fois effacée, la
+   * tuile bascule dans `revealed` : sa solidité et son rendu viennent
+   * désormais du calque "filigrane" (le brouillon d'en dessous).
+   */
+  private readonly breche = new Map<string, number>();
+  private readonly revealed = new Set<string>();
 
   constructor(id: string, map: ParsedMap) {
     this.id = id;
@@ -54,6 +64,61 @@ export class Room {
   /** Tuile solide « naturelle » (décor de la carte, hors encre). */
   isNaturalSolid(tileX: number, tileY: number): boolean {
     return gidAt(this.map, tileX, tileY) > 0;
+  }
+
+  /**
+   * Solidité effective du décor : la tuile "ground" tant qu'elle n'a pas été
+   * BRÈCHE-révélée, sinon la tuile "filigrane" qui transparaît dessous (peut
+   * être vide → nouveau passage, ou solide → nouvel obstacle).
+   */
+  private isGroundOrFiligraneSolid(tileX: number, tileY: number): boolean {
+    if (this.revealed.has(key(tileX, tileY))) {
+      return filigraneGidAt(this.map, tileX, tileY) > 0;
+    }
+    return this.isNaturalSolid(tileX, tileY);
+  }
+
+  // ---------- Murs BRÈCHE (façade effaçable → filigrane) ----------
+
+  /** Marque les tuiles d'un mur BRÈCHE comme effaçables (au chargement). */
+  registerBrecheWall(objectId: number, tiles: readonly TileCoord[]): void {
+    for (const tile of tiles) this.breche.set(key(tile.x, tile.y), objectId);
+  }
+
+  /** Id du mur BRÈCHE couvrant cette tuile (non encore révélé), ou null. */
+  brecheAt(tileX: number, tileY: number): number | null {
+    const k = key(tileX, tileY);
+    if (this.revealed.has(k)) return null;
+    return this.breche.get(k) ?? null;
+  }
+
+  /** Efface un mur BRÈCHE entier : ses tuiles basculent sur le filigrane dessous. */
+  revealFiligrane(objectId: number): void {
+    for (const [k, ownerId] of this.breche) {
+      if (ownerId === objectId) this.revealed.add(k);
+    }
+  }
+
+  isFiligraneRevealed(tileX: number, tileY: number): boolean {
+    return this.revealed.has(key(tileX, tileY));
+  }
+
+  /** Dalles de décor "ground" actuellement solide (murs BRÈCHE non révélés inclus). */
+  groundSlabs(): TileRect[] {
+    return mergeSolidTiles(
+      this.map.widthTiles,
+      this.map.heightTiles,
+      (x, y) => this.isNaturalSolid(x, y) && !this.revealed.has(key(x, y)),
+    );
+  }
+
+  /** Dalles du filigrane révélé et solide (le brouillon qui transparaît). */
+  filigraneSlabs(): TileRect[] {
+    return mergeSolidTiles(
+      this.map.widthTiles,
+      this.map.heightTiles,
+      (x, y) => this.revealed.has(key(x, y)) && filigraneGidAt(this.map, x, y) > 0,
+    );
   }
 
   // ---------- Barrières canon (mots-loi solides et effaçables) ----------
@@ -99,7 +164,9 @@ export class Room {
     if (tileX < 0 || tileX >= this.map.widthTiles || tileY < 0 || tileY >= this.map.heightTiles) {
       return false;
     }
-    return !this.isNaturalSolid(tileX, tileY) && !this.hasInk(tileX, tileY) && !this.hasCanon(tileX, tileY);
+    return (
+      !this.isGroundOrFiligraneSolid(tileX, tileY) && !this.hasInk(tileX, tileY) && !this.hasCanon(tileX, tileY)
+    );
   }
 
   paintInk(tileX: number, tileY: number): void {
@@ -123,6 +190,6 @@ export class Room {
     if (tx < 0 || tx >= this.map.widthTiles) return true;
     if (ty >= this.map.heightTiles) return true;
     if (ty < 0) return false;
-    return this.isNaturalSolid(tx, ty) || this.hasInk(tx, ty) || this.hasCanon(tx, ty);
+    return this.isGroundOrFiligraneSolid(tx, ty) || this.hasInk(tx, ty) || this.hasCanon(tx, ty);
   };
 }

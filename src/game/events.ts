@@ -20,6 +20,10 @@ export interface GameEvents extends Record<string, unknown> {
   canon_completed: { objectId: number; flag: string };
   /** Le joueur atteint une sortie de chapitre. */
   chapter_ended: { ending: string };
+  /** Un mur BRÈCHE a été ouvert : le filigrane transparaît. */
+  breche_opened: { objectId: number; flag: string };
+  /** Le mi-boss (la Coquille majuscule) est vaincu. */
+  boss_defeated: { bossId: string };
 }
 
 export type GameEventBus = EventBus<GameEvents>;

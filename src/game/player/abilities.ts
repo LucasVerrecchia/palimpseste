@@ -8,7 +8,9 @@ import abilitiesJson from '../../data/abilities.json';
 export interface AbilityDef {
   id: string;
   word: string;
-  inkCost: number;
+  /** Coût en encre par tuile ; absent pour les pouvoirs de mouvement (leur
+   * tuning vit dans game/config.ts, même convention que PHYSICS/INK). */
+  inkCost?: number;
   effect: string;
   description: string;
 }

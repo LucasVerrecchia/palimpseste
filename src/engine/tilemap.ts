@@ -27,6 +27,12 @@ export interface ParsedMap {
   tileSize: number;
   /** GIDs du calque "ground", ligne par ligne ; 0 = vide. */
   ground: number[];
+  /**
+   * GIDs du calque "filigrane" (le brouillon d'en dessous, décision D11/§4) ;
+   * `null` si la salle n'en a pas. Révélé tuile par tuile quand BRÈCHE efface
+   * le mur "ground" correspondant (voir game/world/room.ts).
+   */
+  filigrane: number[] | null;
   objects: RoomObject[];
 }
 
@@ -97,36 +103,55 @@ export function parseTiledMap(raw: unknown): ParsedMap {
   if (!Array.isArray(layers)) fail('calques manquants');
 
   let ground: number[] | null = null;
+  let filigrane: number[] | null = null;
   const objects: RoomObject[] = [];
+
+  function parseTileLayerData(layer: Record<string, unknown>, name: string): number[] {
+    const data = layer['data'];
+    if (!Array.isArray(data) || !data.every((v): v is number => typeof v === 'number')) {
+      fail(`calque "${name}" : data doit être un tableau de nombres (encodage CSV/array)`);
+    }
+    if (data.length !== widthTiles * heightTiles) {
+      fail(`calque "${name}" : ${String(data.length)} tuiles au lieu de ${String(widthTiles * heightTiles)}`);
+    }
+    return data;
+  }
 
   for (const layer of layers) {
     if (!isRecord(layer)) continue;
     const layerType = layer['type'];
-    if (layerType === 'tilelayer' && getString(layer, 'name') === 'ground') {
-      const data = layer['data'];
-      if (!Array.isArray(data) || !data.every((v): v is number => typeof v === 'number')) {
-        fail('calque "ground" : data doit être un tableau de nombres (encodage CSV/array)');
+    if (layerType !== 'tilelayer') {
+      if (layerType === 'objectgroup') {
+        const objs = layer['objects'];
+        if (Array.isArray(objs)) {
+          for (const obj of objs) objects.push(parseObject(obj));
+        }
       }
-      if (data.length !== widthTiles * heightTiles) {
-        fail(`calque "ground" : ${String(data.length)} tuiles au lieu de ${String(widthTiles * heightTiles)}`);
-      }
-      ground = data;
-    } else if (layerType === 'objectgroup') {
-      const objs = layer['objects'];
-      if (Array.isArray(objs)) {
-        for (const obj of objs) objects.push(parseObject(obj));
-      }
+      continue;
+    }
+    const name = getString(layer, 'name');
+    if (name === 'ground') {
+      ground = parseTileLayerData(layer, 'ground');
+    } else if (name === 'filigrane') {
+      filigrane = parseTileLayerData(layer, 'filigrane');
     }
   }
 
   if (ground === null) fail('calque de tuiles "ground" introuvable');
-  return { widthTiles, heightTiles, tileSize, ground, objects };
+  return { widthTiles, heightTiles, tileSize, ground, filigrane, objects };
 }
 
 /** GID à la position (tx, ty) ; 0 (vide) hors limites. */
 export function gidAt(map: ParsedMap, tileX: number, tileY: number): number {
   if (tileX < 0 || tileX >= map.widthTiles || tileY < 0 || tileY >= map.heightTiles) return 0;
   return map.ground[tileY * map.widthTiles + tileX] ?? 0;
+}
+
+/** GID du calque "filigrane" à (tx, ty) ; 0 si absent, vide, ou hors limites. */
+export function filigraneGidAt(map: ParsedMap, tileX: number, tileY: number): number {
+  if (map.filigrane === null) return 0;
+  if (tileX < 0 || tileX >= map.widthTiles || tileY < 0 || tileY >= map.heightTiles) return 0;
+  return map.filigrane[tileY * map.widthTiles + tileX] ?? 0;
 }
 
 /** Rectangle en unités de tuiles. */

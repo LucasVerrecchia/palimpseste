@@ -154,6 +154,63 @@ Notes associées : `SAVE_VERSION` v3 (rejet des saves v2 obsolètes) ; `AUTO_RES
 boîte de dialogue à **hauteur calculée** (les choix ne chevauchent plus la
 réplique). **Toujours zéro dépendance runtime.**
 
+### D12 — Ennemis en types + fonctions pures, pas d'ECS générique (Phase 2)
+D6 posait la condition : introduire un ECS « quand la variété d'ennemis le
+justifiera ». La Phase 2 n'ajoute que 2 archétypes communs (Coquille, Rature)
++ 1 mi-boss (la Coquille majuscule) — un registre de composants générique
+serait de la sur-ingénierie pour 3 formes. On réplique donc le pattern déjà
+éprouvé par `narrative/deviation.ts`/`dialogue.ts` : des types (`Enemy`,
+`BossState`) + des fonctions pures testées (`stepEnemy`, `stepBoss`,
+`resolveDashHit`, `resolveBossDashHit`), sans DOM ni Canvas, dans
+`game/enemies/`. `Game` ne fait qu'orchestrer (appeler, stocker le tableau,
+rendre).
+
+Combat : la spec (§6) assigne explicitement à HÂTE le rôle « gaps, combat ».
+Il n'y a donc pas de bouton d'attaque séparé — dasher à travers un ennemi
+commun le détruit ; le mi-boss n'accepte les dégâts que dans sa fenêtre
+« vulnerable », télégraphée (cycle patrol → telegraph → vulnerable → recover),
+pour éviter un combat au hasard.
+
+### D13 — Portée de la Phase 2 : machinerie complète + 2 salles (2026-07-22)
+Décision de calibrage validée avec Lucas : construire le contenu complet des
+5 zones dans une seule phase aurait été un morceau de level-design
+disproportionné (le sujet privilégie « petit mais irréprochable », spec
+ligne 16). Cette phase livre donc la **machinerie complète et testée** —
+HÂTE (dash), ANCRE (grimper), ALES (double saut/vol plané), le filigrane +
+BRÈCHE, les ennemis, le mi-boss, un système de transition de salles générique
+(`Game.loadRoom`) — mais seulement **2 salles connectées** : `marge_01`
+(Chapitre 1, D11, inchangée narrativement) et `chapitre_01`, un blockout
+**volontairement sans contenu narratif** (aucun PNJ, aucune phrase-loi —
+les choix narratifs se décident avec Lucas, pas dans cette passe) qui
+enchaîne dans l'ordre les 3 pouvoirs restants + le filigrane + un ennemi de
+chaque sorte + le mi-boss, pour prouver la chaîne complète. Les 3 zones
+restantes (L'Annotation, Le Brouillon, La Page Blanche) restent du
+level-design pour une passe ultérieure, une fois la machinerie validée.
+
+Détails techniques :
+- `engine/tilemap.ts` : `ParsedMap.filigrane` (calque optionnel, même
+  convention que `ground`), `filigraneGidAt`.
+- `world/room.ts` : registre `breche` (Map tile→id, même idiome que les
+  barrières canon) + `revealed` (Set) ; `isSolid`/`isPaintable` basculent sur
+  la solidité du filigrane une fois une tuile révélée. `groundSlabs()` et
+  `filigraneSlabs()` sont recalculées à chaque rendu (comme `inkSlabs`/
+  `canonSlabs` déjà) plutôt que mises en cache : nécessaire puisque la
+  solidité du décor change désormais en cours de partie.
+- `Game.loadRoom(roomId, freshPlayer, spawnOverride?)` reconstruit salle,
+  mots-loi, murs BRÈCHE, ennemis, mi-boss et texture papier, puis repositionne
+  le joueur (neuf au premier chargement, préservé — vie/pouvoirs/encre — à
+  chaque porte). `Game.replayRoomState()` centralise le rejeu depuis les
+  flags (canon/brèche/boss/mots déjà acquis), appelé après chaque
+  `loadRoom` et après une restauration de sauvegarde.
+- Nouvel objet Tiled `door` (`targetRoom`, `targetX`, `targetY`), distinct de
+  `exit` (réservé aux fins de chapitre, D11). `doorCooldown` (0,3 s posé par
+  `loadRoom`) empêche un aller-retour immédiat si le point d'arrivée
+  chevauchait la porte de destination — en plus de ça, chaque paire de portes
+  vise une position décalée de quelques tuiles de la porte réceptrice.
+- Le schéma de save (v3, D11) avait déjà `playerPos.room`/`visitedRooms` :
+  aucune migration nécessaire, seul le loader branche désormais sur la bonne
+  salle.
+
 ## Diagramme de dépendances (cible)
 
 ```
@@ -172,8 +229,22 @@ main.ts ──▶ game/ ──▶ engine/
   salle avec plateformes non-écrites, HUD, boîte de dialogue, save/restore.
 - 47 tests Vitest sur la logique pure.
 
-## À venir (Phase 2)
-- ECS léger (voir D6) + ennemis (Coquilles, Ratures) + boss Coquille majuscule.
-- `world/palimpsest.ts` : couches en filigrane (effacement → révélation).
-- Transitions de salles multiples ; salles éditées dans Tiled.
-- Pouvoirs BRÈCHE, HÂTE, ANCRE, ALES + gating.
+## Réalisé en Phase 2 (D12/D13, 2026-07-22)
+- Pouvoirs BRÈCHE, HÂTE, ANCRE, ALES + gating dans `player/controller.ts`
+  (`stepPlayer` reçoit désormais le set des pouvoirs débloqués).
+- Filigrane (`engine/tilemap.ts` + `world/room.ts`) + BRÈCHE (mur effaçable
+  → révèle le brouillon dessous).
+- `game/enemies/` : Coquilles (patrouille), Ratures (poursuite, effacent
+  l'encre du joueur au contact), mi-boss la Coquille majuscule (phases
+  télégraphiées). Détruits par le dash HÂTE (rôle « combat » de la spec §6).
+- Transition de salles génériques (`Game.loadRoom`, objet Tiled `door`) ;
+  2 salles connectées (`marge_01`, `chapitre_01`) — voir D13 pour la portée.
+- 124 tests Vitest (dash/wall-grab/double-saut, filigrane/brèche, IA des
+  ennemis, phases du boss, structure des données de salle).
+
+## À venir (Phase 2b / Phase 3)
+- Level design des 3 zones restantes (L'Annotation, Le Brouillon, La Page
+  Blanche) une fois la machinerie validée par Lucas (D13).
+- Boss Errata, les 2 fins + `endings.ts`, contenu narratif (PNJ, dialogues) —
+  à décider avec Lucas, pas en solo.
+- Audio, particules, juice supplémentaire.

@@ -88,3 +88,20 @@
   - Tests : `resolveSentence` (4 cas) ajoutés → 75 tests. D11 (docs/architecture.md), CLAUDE.md et README d'état mis à jour.
 - **Modifications manuelles** : aucune ; décisions par échanges structurés. Textes narratifs marqués [proposition].
 - **Décision d'intégration** : intégré après typecheck + 75 tests + lint + build verts, et vérif de la recomposition de phrase pour les 5 états. Playtest de confirmation attendu.
+
+## Session 7 — 2026-07-22 — Playtest D11 + Phase 2 : pouvoirs, filigrane, ennemis, mi-boss, 2 salles
+- **Contexte** : reprise de session. D11 marqué « en attente de playtest » dans CLAUDE.md ; demande de playtester rapidement avant d'attaquer la Phase 2, avec consigne : « les choix narratifs on va décider ensemble ».
+- **Prompt (résumé)** : « on va reprendre ce projet metroidvania […] relis le projet » puis, après revue de l'état d'avancement : « tu peux faire le 2 MAIS avant tu peux faire un petit playtest […] pour les choix narratifs on va decider ensemble ».
+- **Modèle & outil** : Claude Sonnet 5 (claude-sonnet-5) via Claude Code (extension VS Code).
+- **Playtest D11** (pipeline Playwright headless + dev server, mis en place cette session car aucun `chromium-cli` disponible sur cette machine Windows) : bug trouvé — le bandeau de la phrase-loi et le libellé « encre » de la jauge se superposaient (les deux dessinés à y=20 en haut-gauche). Corrigé (`game.ts`, bandeau descendu à y=38), commit `af5379e` isolé avant la Phase 2.
+- **Plan de Phase 2** (mode plan, exploration via 3 agents Explore en parallèle sur player/abilities, world/room/tilemap, narrative/tests + game.ts) : question structurée posée sur l'ampleur (5 zones complètes tout de suite vs machinerie complète + 2 salles) — **décision humaine : machinerie complète + 2 salles** (les 3 zones restantes en level-design différé).
+- **Output** :
+  - Pouvoirs : `engine/physics.ts` (`isTouchingWall`), `game/config.ts` (`DASH`, `WALL_CLIMB`, `AIR_JUMP`), `engine/input.ts` (action `dash`, Maj), `player/controller.ts` (`stepPlayer` reçoit le set des pouvoirs débloqués ; dash HÂTE, grimpe ANCRE via haut/bas, double-saut + vol plané ALES).
+  - Filigrane + BRÈCHE : `engine/tilemap.ts` (calque optionnel `filigrane`, `filigraneGidAt`), `world/room.ts` (registre `breche`/`revealed`, solidité qui bascule à la révélation, `groundSlabs`/`filigraneSlabs` recalculées à chaque rendu).
+  - Ennemis (`game/enemies/enemy.ts`) et mi-boss (`game/enemies/boss_coquille_majuscule.ts`) : types + fonctions pures (décision **D12** : pas d'ECS générique pour 3 archétypes), détruits par le dash HÂTE (rôle « combat » de la spec §6) ; mi-boss en phases télégraphiées.
+  - Transition de salles : `Game.loadRoom`/`replayRoomState` (généralise le rejeu de flags déjà utilisé pour les canons/déviations), objet Tiled `door`, `doorCooldown` anti-ping-pong. Décision **D13** documentée (portée de la Phase 2).
+  - Salle `chapitre_01` (`tools/gen_room_chapitre01.mjs`, 56×17) : **aucun PNJ ni texte narratif** — blockout mécanique enchaînant ANCRE → ALES → BRÈCHE → Coquille + Rature → mi-boss. `marge_01` régénérée avec une nouvelle porte (après la cage « enfermé »).
+  - Tests : `controller.test.ts`, `enemy.test.ts`, `boss.test.ts` (nouveaux) + ajouts dans `physics.test.ts`/`tilemap.test.ts`/`room.test.ts`. Total 124 tests.
+  - Docs : `architecture.md` (D12, D13, sections Phase 2), `CLAUDE.md` (état d'avancement).
+- **Modifications manuelles** : aucune ; décisions par question structurée.
+- **Décision d'intégration** : intégré après typecheck + 124 tests + lint + `vite build` verts. Playtest headless confirme visuellement le rendu de la porte et le ramassage ÉCRIRE dans `marge_01` sans erreur console ; la traversée complète de `chapitre_01` (mur ANCRE, gouffre ALES, brèche, mi-boss) n'a **pas** pu être jouée à la souris de façon fiable en automatique (précision de clic + caméra mobile) — **playtest manuel de Lucas attendu** avant de valider la Phase 2 et d'attaquer le level design des zones restantes.

@@ -42,6 +42,28 @@ export const PLAYER = {
   maxHealth: 100,
 } as const;
 
+/** HÂTE — dash horizontal (traînée d'encre). Rôle spec §6 : gaps ET combat. */
+export const DASH = {
+  speed: 260,
+  durationSeconds: 0.16,
+  cooldownSeconds: 0.5,
+} as const;
+
+/** ANCRE — agrippe/grimpe les murs (jeu de mots encre/ancre). */
+export const WALL_CLIMB = {
+  climbSpeed: 60,
+  /** Vitesse de glissade quand on s'accroche sans appuyer haut/bas. */
+  slideSpeed: 40,
+} as const;
+
+/** ALES — double saut / vol plané. */
+export const AIR_JUMP = {
+  maxAirJumps: 1,
+  jumpVelocity: -300,
+  /** Chute plafonnée une fois le saut aérien consommé, si on maintient Espace. */
+  glideFallSpeed: 70,
+} as const;
+
 /**
  * Ressource d'encre. Le joueur trace des blocs d'encre à la souris (clic
  * gauche) ; le clic droit les efface et rembourse l'encre. La difficulté vient
@@ -57,6 +79,40 @@ export const INK = {
 
 /** Marge (px) autour du joueur pour détecter les interactions (PNJ, encrier). */
 export const INTERACT_MARGIN = 10;
+
+/**
+ * Ennemis communs (spec §6). Pas d'ECS générique (décision D12) : seulement
+ * 2 archétypes + 1 mi-boss, des types + fonctions pures suffisent.
+ * Détruits par HÂTE (dash) — rôle "combat" explicitement assigné à HÂTE.
+ */
+export const ENEMY = {
+  width: 12,
+  height: 14,
+  coquilleSpeed: 26,
+  ratureSpeed: 42,
+  /** Distance (px) sous laquelle une Rature abandonne sa patrouille et poursuit. */
+  ratureChaseRange: 70,
+  contactDamage: 8,
+  /** Anti-spam de dégâts au contact prolongé (secondes). */
+  hitCooldownSeconds: 0.6,
+} as const;
+
+/**
+ * Mi-boss — la Coquille majuscule (spec §6). Cycle de phases télégraphiées :
+ * patrouille → charge (télégraphe) → vulnérable (seule fenêtre où HÂTE fait
+ * mal) → récupération → patrouille. Évite un combat "au hasard".
+ */
+export const BOSS = {
+  width: 20,
+  height: 20,
+  health: 3,
+  patrolSpeed: 34,
+  patrolSeconds: 2.2,
+  telegraphSeconds: 0.6,
+  vulnerableSeconds: 1,
+  recoverSeconds: 1.4,
+  contactDamage: 12,
+} as const;
 
 /**
  * Reprendre la sauvegarde au démarrage ? `false` pendant le développement :

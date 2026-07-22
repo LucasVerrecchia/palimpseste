@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { gidAt, mergeSolidTiles, parseTiledMap } from '../src/engine/tilemap';
+import { filigraneGidAt, gidAt, mergeSolidTiles, parseTiledMap } from '../src/engine/tilemap';
 import marge01 from '../src/data/rooms/marge_01.json';
+import chapitre01 from '../src/data/rooms/chapitre_01.json';
 
 function minimalMap(): Record<string, unknown> {
   return {
@@ -73,6 +74,22 @@ describe('parseTiledMap', () => {
     expect(gidAt(map, 0, 5)).toBe(0);
     expect(gidAt(map, 0, 0)).toBe(1);
     expect(gidAt(map, 1, 0)).toBe(0);
+  });
+
+  it('filigrane est null quand la salle n\'a pas ce calque', () => {
+    const map = parseTiledMap(minimalMap());
+    expect(map.filigrane).toBeNull();
+    expect(filigraneGidAt(map, 0, 0)).toBe(0);
+  });
+
+  it('parse un second calque "filigrane" quand présent', () => {
+    const raw = minimalMap();
+    (raw['layers'] as unknown[]).push({ type: 'tilelayer', name: 'filigrane', data: [0, 2, 2, 0] });
+    const map = parseTiledMap(raw);
+    expect(map.filigrane).toEqual([0, 2, 2, 0]);
+    expect(filigraneGidAt(map, 1, 0)).toBe(2);
+    expect(filigraneGidAt(map, 0, 0)).toBe(0);
+    expect(filigraneGidAt(map, -1, 0)).toBe(0);
   });
 });
 
@@ -204,5 +221,67 @@ describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)',
     expect(jamais?.properties['mode']).toBe('barrier');
     expect(jamais?.properties['flag']).toBe('rature_jamais');
     expect(jamais?.properties['leaning']).toBe(-1);
+  });
+
+  it('porte vers chapitre_01, placée après la cage « enfermé »', () => {
+    const door = map.objects.find((o) => o.type === 'door');
+    expect(door).toBeDefined();
+    expect(door?.properties['targetRoom']).toBe('chapitre_01');
+    expect(door?.x).toBeGreaterThan(15 * 16); // au-delà de la cage (colonnes 14-15)
+  });
+});
+
+describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réelles)', () => {
+  const map = parseTiledMap(chapitre01);
+
+  it('a un contour fermé et un calque "filigrane" (contrairement à marge_01)', () => {
+    for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) {
+      expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, map.widthTiles - 1, ty)).toBeGreaterThan(0);
+    }
+    expect(map.filigrane).not.toBeNull();
+  });
+
+  it('le mur ANCRE bloque le sol mais laisse de la place pour passer par-dessus', () => {
+    const wall = map.objects.find((o) => o.name === 'mur_ancre');
+    expect(wall).toBeDefined();
+    const col = Math.floor((wall?.x ?? 0) / 16);
+    // Solide du sol jusqu'à une bonne hauteur...
+    for (let ty = 6; ty <= 16; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
+    // ...mais pas jusqu'au plafond : on peut grimper puis passer par-dessus.
+    expect(gidAt(map, col, 1)).toBe(0);
+    expect(gidAt(map, col, 2)).toBe(0);
+  });
+
+  it('le gouffre ALES coupe le sol sur plusieurs tuiles', () => {
+    let gapWidth = 0;
+    for (let tx = 1; tx < map.widthTiles - 1; tx++) {
+      if (gidAt(map, tx, 14) === 0 && gidAt(map, tx, 16) === 0) gapWidth++;
+    }
+    expect(gapWidth).toBeGreaterThanOrEqual(4);
+  });
+
+  it('le mur BRÈCHE est plein du sol au plafond (aucun passage par-dessus)', () => {
+    const wall = map.objects.find((o) => o.type === 'breche_wall');
+    expect(wall).toBeDefined();
+    const col = Math.floor((wall?.x ?? 0) / 16);
+    for (let ty = 0; ty <= 16; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
+    expect(wall?.properties['flag']).toBeTypeOf('string');
+  });
+
+  it('contient les ennemis communs et le mi-boss, aucun PNJ ni phrase-loi', () => {
+    const kinds = map.objects.filter((o) => o.type === 'enemy').map((o) => o.properties['kind']);
+    expect(new Set(kinds)).toEqual(new Set(['coquille', 'rature']));
+    expect(map.objects.some((o) => o.type === 'boss')).toBe(true);
+    expect(map.objects.some((o) => o.type === 'npc')).toBe(false);
+    expect(map.objects.some((o) => o.type === 'canon')).toBe(false);
+  });
+
+  it('la porte de retour vise marge_01 loin de sa propre case (anti aller-retour)', () => {
+    const door = map.objects.find((o) => o.type === 'door');
+    expect(door?.properties['targetRoom']).toBe('marge_01');
+    const targetX = door?.properties['targetX'];
+    expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
   });
 });

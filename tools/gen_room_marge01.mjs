@@ -83,6 +83,18 @@ const objects = [
     ],
   },
 
+  // Porte vers le Chapitre Premier (blockout Phase 2, machinerie uniquement :
+  // aucun texte narratif ici, cf. décision de calibrage Phase 2). Placée après
+  // la rature d'« enfermé » — on ne peut l'atteindre qu'après ce premier geste.
+  {
+    id: id(), name: 'porte_chapitre1', type: 'door', x: 20 * TILE, y: 192, width: 16, height: 32,
+    properties: [
+      prop('targetRoom', 'string', 'chapitre_01'),
+      prop('targetX', 'int', 64),
+      prop('targetY', 'int', 202),
+    ],
+  },
+
   // Encrier / point de sauvegarde, avant la zone du choix.
   { id: id(), name: 'encrier_marge', type: 'inkwell', x: 28 * TILE, y: 200, width: 16, height: 24 },
 
