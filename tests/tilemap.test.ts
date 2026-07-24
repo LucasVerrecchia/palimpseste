@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { filigraneGidAt, gidAt, mergeSolidTiles, parseTiledMap } from '../src/engine/tilemap';
 import marge01 from '../src/data/rooms/marge_01.json';
 import chapitre01 from '../src/data/rooms/chapitre_01.json';
+import ratures01 from '../src/data/rooms/ratures_01.json';
 
 function minimalMap(): Record<string, unknown> {
   return {
@@ -313,8 +314,71 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
   });
 
   it('la porte de retour vise marge_01 loin de sa propre case (anti aller-retour)', () => {
+    const door = map.objects.find((o) => o.type === 'door' && o.properties['targetRoom'] === 'marge_01');
+    expect(door).toBeDefined();
+    const targetX = door?.properties['targetX'];
+    expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
+  });
+
+  it('porte vers ratures_01, au-delà de l\'arène du mi-boss (D15)', () => {
+    const doors = map.objects.filter((o) => o.type === 'door');
+    expect(doors).toHaveLength(2);
+    const forward = doors.find((o) => o.properties['targetRoom'] === 'ratures_01');
+    const boss = map.objects.find((o) => o.type === 'boss');
+    expect(forward).toBeDefined();
+    expect(forward?.x ?? 0).toBeGreaterThan(boss?.x ?? 0);
+    // Contour toujours fermé malgré l'élargissement de la salle (W=74).
+    for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) {
+      expect(gidAt(map, map.widthTiles - 1, ty)).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('salle ratures_01 — zone 3 « Les Ratures » (premier PNJ narratif au-delà de La Marge)', () => {
+  const map = parseTiledMap(ratures01);
+
+  it('a un contour fermé', () => {
+    for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) {
+      expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, map.widthTiles - 1, ty)).toBeGreaterThan(0);
+    }
+  });
+
+  it('contient un unique PNJ, un encrier, un fragment et une porte de retour ; aucun ennemi ni boss', () => {
+    const types = new Set(map.objects.map((o) => o.type));
+    for (const required of ['spawn', 'npc', 'inkwell', 'fragment', 'door']) {
+      expect(types.has(required), `objet manquant : ${required}`).toBe(true);
+    }
+    expect(map.objects.filter((o) => o.type === 'npc')).toHaveLength(1);
+    expect(types.has('enemy')).toBe(false);
+    expect(types.has('boss')).toBe(false);
+    expect(types.has('canon')).toBe(false);
+  });
+
+  it('le PNJ pointe vers le dialogue pnj_ratures', () => {
+    const npc = map.objects.find((o) => o.type === 'npc');
+    expect(npc?.properties['dialogue']).toBe('pnj_ratures');
+  });
+
+  it('un petit gouffre coupe le sol avant le PNJ (déjà franchissable, aucun pouvoir n\'y est enseigné)', () => {
+    const npc = map.objects.find((o) => o.type === 'npc');
+    let gapWidth = 0;
+    let gapEndsBeforeNpc = true;
+    for (let tx = 1; tx < map.widthTiles - 1; tx++) {
+      if (gidAt(map, tx, 14) === 0 && gidAt(map, tx, 16) === 0) {
+        gapWidth++;
+        if (tx * 16 >= (npc?.x ?? 0)) gapEndsBeforeNpc = false;
+      }
+    }
+    expect(gapWidth).toBeGreaterThanOrEqual(3);
+    expect(gapEndsBeforeNpc).toBe(true);
+  });
+
+  it('la porte de retour vise chapitre_01 loin des deux portes concernées', () => {
     const door = map.objects.find((o) => o.type === 'door');
-    expect(door?.properties['targetRoom']).toBe('marge_01');
+    expect(door?.properties['targetRoom']).toBe('chapitre_01');
     const targetX = door?.properties['targetX'];
     expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
   });

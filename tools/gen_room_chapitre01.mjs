@@ -9,7 +9,8 @@
  *
  *   porte (retour La Marge) → mur à franchir en s'y traçant des plateformes
  *   d'encre (ÉCRIRE) → gouffre AILES (double saut) → mur BRÈCHE (effacer →
- *   filigrane) → Coquille + Rature → arène du mi-boss (avec fiole de secours).
+ *   filigrane) → Coquille + Rature → arène du mi-boss (avec fiole de secours)
+ *   → porte vers ratures_01 (zone 3 « Les Ratures », D15).
  *
  * Même convention que gen_room_marge01.mjs (D7) : géométrie décrite par des
  * rectangles nommés, JSON compatible Tiled en sortie.
@@ -18,7 +19,10 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const W = 68;
+// W = 74 (élargi de 68 à 74, D15) : 6 tuiles de couloir après l'arène du
+// mi-boss pour une porte vers ratures_01 (zone 3, « Les Ratures ») — jusqu'ici
+// la marge droite était la fin physique du contenu construit.
+const W = 74;
 const H = 17;
 const TILE = 16;
 
@@ -128,6 +132,19 @@ const objects = [
   // Mi-boss : la Coquille majuscule, en bout d'arène.
   {
     id: id(), name: 'boss_coquille_majuscule', type: 'boss', x: 58 * TILE, y: 14 * TILE - 20, width: 4 * TILE, height: 20,
+  },
+
+  // Porte vers ratures_01 (zone 3, D15) — au-delà de l'arène, dans le couloir
+  // ajouté avec l'élargissement à W=74. Cible loin de la porte de retour
+  // côté ratures_01 (x=2*16) et de porte_marge ci-dessus (x=2*16 également,
+  // mais dans une autre salle) : pas de risque d'aller-retour immédiat.
+  {
+    id: id(), name: 'porte_ratures', type: 'door', x: 70 * TILE, y: 192, width: 16, height: 32,
+    properties: [
+      prop('targetRoom', 'string', 'ratures_01'),
+      prop('targetX', 'int', 6 * TILE),
+      prop('targetY', 'int', 202),
+    ],
   },
 ];
 

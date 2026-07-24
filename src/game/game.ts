@@ -56,6 +56,7 @@ import {
   advanceDialogue,
   currentNode,
   parseDialogueData,
+  resolveDialogueStart,
   startDialogue,
   type DialogueData,
   type DialogueEffect,
@@ -78,8 +79,10 @@ import {
   type SentenceVariant,
 } from './narrative/deviation';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
+import dialoguePnjRatures from '../data/dialogues/pnj_ratures.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
 import roomChapitre01 from '../data/rooms/chapitre_01.json';
+import roomRatures01 from '../data/rooms/ratures_01.json';
 import chapterMarge01 from '../data/chapters/marge_01.json';
 
 /**
@@ -90,6 +93,7 @@ import chapterMarge01 from '../data/chapters/marge_01.json';
 const ROOMS: Record<string, unknown> = {
   marge_01: roomMarge01,
   chapitre_01: roomChapitre01,
+  ratures_01: roomRatures01,
 };
 
 const DEFAULT_ROOM_ID = 'marge_01';
@@ -217,7 +221,10 @@ export class Game {
     this.viewport = viewport;
     this.storage = storage;
     this.bus = createGameBus();
-    this.dialogues = { pnj_marge: parseDialogueData(dialoguePnjMarge) };
+    this.dialogues = {
+      pnj_marge: parseDialogueData(dialoguePnjMarge),
+      pnj_ratures: parseDialogueData(dialoguePnjRatures),
+    };
     this.checkpoint = { x: 0, y: 0 };
 
     this.loadRoom(DEFAULT_ROOM_ID, true);
@@ -304,6 +311,9 @@ export class Game {
       1,
     );
 
+    if (roomId === 'ratures_01' && !this.visitedRooms.has(roomId)) {
+      this.toast('Fin du contenu actuel : les zones 4 à 6 arriveront dans une prochaine passe.');
+    }
     this.visitedRooms.add(roomId);
     this.bus.emit('room_entered', { roomId });
     this.replayRoomState();
@@ -663,7 +673,6 @@ export class Game {
       this.bus.emit('boss_defeated', { bossId: 'coquille_majuscule' });
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 24, PALETTE.danger, 80);
       this.toast('La Coquille majuscule est corrigée.');
-      this.toast('Fin du contenu actuel : la suite (zones 3 à 5) arrivera dans une prochaine passe.');
     } else if (boss.phase !== this.prevBossPhase && boss.phase === 'vulnerable') {
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 6, PALETTE.unwritten, 40);
       if (!this.bossHintShown) {
@@ -740,8 +749,12 @@ export class Game {
 
   private applyEffects(effects: readonly DialogueEffect[]): void {
     for (const effect of effects) {
-      this.storyFlags[effect.flag] = effect.value;
-      this.bus.emit('flag_set', { flag: effect.flag, value: effect.value });
+      if (effect.type === 'set_flag') {
+        this.storyFlags[effect.flag] = effect.value;
+        this.bus.emit('flag_set', { flag: effect.flag, value: effect.value });
+      } else {
+        this.endingLeaning = applyLeaning(this.endingLeaning, effect.delta);
+      }
     }
   }
 
@@ -1045,7 +1058,7 @@ export class Game {
       const dialogueId = npc.properties['dialogue'];
       const data = typeof dialogueId === 'string' ? this.dialogues[dialogueId] : undefined;
       if (data !== undefined) {
-        const step = startDialogue(data);
+        const step = startDialogue(data, resolveDialogueStart(data, this.storyFlags));
         this.applyEffects(step.effects);
         this.dialogue = { data, state: step.state, selected: 0 };
         this.mode = 'dialogue';

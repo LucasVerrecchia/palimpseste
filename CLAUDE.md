@@ -200,10 +200,45 @@ danger #C1362B, non-écrit #CFE3E8.
   - Soleil : rayons esquissés (traits radiaux irréguliers) pour coller à la
     DA "dessin".
   - 138 tests (inchangé), `tsc`/`eslint` verts.
-- Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond
-  terminées et playtestées. **Manquant pour la conformité au brief** : PNJ
-  secondaire + dialogues (aucun n'existe encore), zones/niveaux
-  supplémentaires (spec en prévoit 5 + climax, 2 salles construites),
-  `endings.ts`/`resolveEnding` + salle climax "La Page Blanche" + pouvoir
-  POINT (2 fins obligatoires). Prochaine étape à discuter avec Lucas (voir
-  session en cours).
+  - Correction d'une erreur de ce journal : un PNJ existait déjà
+    (`Le Signet`, `marge_01`, machine à états `narrative/dialogue.ts`
+    testée) — la note précédente ("aucun PNJ n'existe encore") était fausse.
+- **Neuvième round (2026-07-24) — zone 3 « Les Ratures » + PNJ adaptatif** :
+  relu `Palimpseste_SPEC.md` (§6-7) avec Lucas pour cadrer la suite. Décidé
+  ensemble : pas de PNJ-miroir contradictoire (« si deux PNJ racontent une
+  histoire différente, ça embrouille l'esprit » — on peut parler aux deux) ;
+  à la place, un PNJ **unique** dont les dialogues s'adaptent aux choix déjà
+  faits par le joueur.
+  - `narrative/dialogue.ts` : `DialogueEffect` devient une union
+    (`set_flag` existant + nouveau `set_leaning`, réutilise `applyLeaning`
+    comme les mots-loi) ; `DialogueStartVariant`/`resolveDialogueStart`
+    (même principe que `resolveSentence` — la variante la plus spécifique
+    dont les `when` correspondent aux storyFlags l'emporte) permet à un
+    dialogue de démarrer sur un nœud différent sans dupliquer le
+    personnage. `startDialogue` accepte le nœud de départ résolu. Testé.
+  - `data/dialogues/pnj_ratures.json` (nouveau, [proposition] à valider) :
+    **La Rature qui regrette**, personnage rayé d'un vieux brouillon. Un
+    seul historique (nœud `*_histoire`, texte identique dans les 3
+    branches) ; seules l'intro et la réaction changent selon
+    `rature_jamais`/`nom_ecrit` (les flags réels posés dans La Marge, pas
+    de nouveaux flags parallèles). Branche neutre (ni l'un ni l'autre) :
+    propose encore le choix, comme Le Signet.
+  - `tools/gen_room_ratures01.mjs` (nouveau) → `data/rooms/ratures_01.json` :
+    zone 3 de la spec (« cimetière de persos coupés »), aucun nouveau
+    pouvoir (les 4 déjà acquis), un petit gouffre AILES + un fragment de
+    lore en hauteur pour rester un niveau. `gen_room_chapitre01.mjs` élargi
+    (W 68→74) pour une porte après l'arène du mi-boss, jusqu'ici fin
+    physique du contenu construit.
+  - Toast "fin du contenu actuel" déplacé du mi-boss (désormais faux, la
+    suite existe) vers la première entrée dans `ratures_01` (une seule
+    fois, via `visitedRooms`) ; texte mis à jour (zones 4 à 6 restantes).
+  - `backdrop.ts` : `ratures_01` ajoutée aux salles couvertes par le fond
+    en parallaxe.
+  - 148 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    (screenshot Chromium headless).
+- Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond +
+  zone 3 (PNJ adaptatif) terminées et playtestées. **Manquant pour la
+  conformité au brief** : zones 4-6 (spec en prévoit 5 + climax, 3 salles
+  construites), `endings.ts`/`resolveEnding` + salle climax "La Page
+  Blanche" + pouvoir POINT (2 fins obligatoires — `endingLeaning` déjà
+  nourri par les mots-loi et, depuis ce round, par le dialogue).

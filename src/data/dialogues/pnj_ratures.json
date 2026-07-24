@@ -1,0 +1,92 @@
+{
+  "id": "pnj_ratures",
+  "start": "doute_intro",
+  "startVariants": [
+    { "when": { "rature_jamais": true }, "start": "rature_intro" },
+    { "when": { "nom_ecrit": true }, "start": "point_intro" }
+  ],
+  "_comment": "[proposition narration — à valider avec Lucas]. Un seul PNJ, une seule histoire (pas de personnage-miroir contradictoire, retour explicite de Lucas) : La Rature qui regrette, un personnage rayé d'un vieux brouillon qui hante la marge entre les pages. Elle ne pousse vers aucune fin : son introduction et sa réaction changent selon le choix déjà fait dans La Marge (rature_jamais / nom_ecrit), mais le cœur de son histoire (le nœud *_histoire, texte identique dans les 3 branches) ne varie jamais.",
+  "nodes": {
+    "rature_intro": {
+      "speaker": "La Rature qui regrette",
+      "text": "Tiens. Une autre main qui efface. Je reconnais ce geste : on m'a rayée d'un brouillon, il y a longtemps.",
+      "next": "rature_histoire"
+    },
+    "rature_histoire": {
+      "speaker": "La Rature qui regrette",
+      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "next": "rature_reaction"
+    },
+    "rature_reaction": {
+      "speaker": "La Rature qui regrette",
+      "text": "Tu as pris la même sortie que la mienne. Je ne sais toujours pas si c'est une libération ou juste un vide de plus. Va, et si tu le sais un jour, reviens me le dire.",
+      "effects": [
+        { "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true },
+        { "type": "set_leaning", "delta": -0.5 }
+      ]
+    },
+    "point_intro": {
+      "speaker": "La Rature qui regrette",
+      "text": "Tiens. Une main qui écrit, pour une fois. On en voit peu, par ici.",
+      "next": "point_histoire"
+    },
+    "point_histoire": {
+      "speaker": "La Rature qui regrette",
+      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "next": "point_reaction"
+    },
+    "point_reaction": {
+      "speaker": "La Rature qui regrette",
+      "text": "Toi, tu vas jusqu'au bout de la phrase. Je ne saurai jamais ce que ça fait d'être finie plutôt qu'annulée. Va vite, avant que quelqu'un change encore d'avis.",
+      "effects": [
+        { "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true },
+        { "type": "set_leaning", "delta": 0.5 }
+      ]
+    },
+    "doute_intro": {
+      "speaker": "La Rature qui regrette",
+      "text": "Tiens. Une main qui hésite encore. Je me souviens de cette hésitation-là.",
+      "next": "doute_histoire"
+    },
+    "doute_histoire": {
+      "speaker": "La Rature qui regrette",
+      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "next": "doute_choix"
+    },
+    "doute_choix": {
+      "speaker": "La Rature qui regrette",
+      "text": "On m'a rayée avant que je choisisse quoi que ce soit. Toi, tu as encore les deux routes ouvertes. Laquelle t'appelle, au fond ?",
+      "choices": [
+        {
+          "text": "Disparaître, comme toi.",
+          "next": "doute_fin_rature",
+          "effects": [{ "type": "set_leaning", "delta": -0.5 }]
+        },
+        {
+          "text": "Aller jusqu'au bout de la phrase.",
+          "next": "doute_fin_point",
+          "effects": [{ "type": "set_leaning", "delta": 0.5 }]
+        },
+        {
+          "text": "Je ne sais toujours pas.",
+          "next": "doute_fin_neutre"
+        }
+      ]
+    },
+    "doute_fin_rature": {
+      "speaker": "La Rature qui regrette",
+      "text": "Alors va. On se recroisera peut-être, dans le même trait noir.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true }]
+    },
+    "doute_fin_point": {
+      "speaker": "La Rature qui regrette",
+      "text": "Alors va vite. Finis ce que je n'ai pas eu le droit de finir.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true }]
+    },
+    "doute_fin_neutre": {
+      "speaker": "La Rature qui regrette",
+      "text": "Les brouillons ont le droit d'hésiter encore. Reviens me lire, si tu changes d'avis.",
+      "effects": [{ "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true }]
+    }
+  }
+}

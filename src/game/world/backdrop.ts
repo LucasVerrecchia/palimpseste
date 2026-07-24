@@ -27,7 +27,7 @@ import { BACKDROP, hexAlpha, INTERNAL_WIDTH, PALETTE } from '../config';
 export type BackdropKind = 'manuscrit';
 
 /** Salles couvertes par le fond. `Set` plutôt qu'un enum : pas d'autre motif pour l'instant. */
-const BACKDROP_ROOMS = new Set(['marge_01', 'chapitre_01']);
+const BACKDROP_ROOMS = new Set(['marge_01', 'chapitre_01', 'ratures_01']);
 
 /** Fonction pure isolée du canvas : testable seule, et seul endroit à toucher si une salle ne doit pas avoir de fond. */
 export function resolveBackdropKind(roomId: string): BackdropKind | null {

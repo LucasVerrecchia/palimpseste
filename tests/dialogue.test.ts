@@ -3,6 +3,7 @@ import {
   advanceDialogue,
   currentNode,
   parseDialogueData,
+  resolveDialogueStart,
   startDialogue,
   type DialogueData,
 } from '../src/game/narrative/dialogue';
@@ -65,6 +66,35 @@ describe('machine à états de dialogue', () => {
   });
 });
 
+describe('resolveDialogueStart — un PNJ unique qui réagit aux choix déjà faits', () => {
+  const adaptive: DialogueData = {
+    id: 'adaptive',
+    start: 'neutre',
+    startVariants: [
+      { when: { rature_jamais: true }, start: 'rature' },
+      { when: { nom_ecrit: true }, start: 'point' },
+    ],
+    nodes: {
+      neutre: { speaker: 'X', text: 'neutre' },
+      rature: { speaker: 'X', text: 'rature' },
+      point: { speaker: 'X', text: 'point' },
+    },
+  };
+
+  it('retombe sur `start` sans flag correspondant', () => {
+    expect(resolveDialogueStart(adaptive, {})).toBe('neutre');
+  });
+
+  it('choisit la variante dont le flag est vrai', () => {
+    expect(resolveDialogueStart(adaptive, { rature_jamais: true })).toBe('rature');
+    expect(resolveDialogueStart(adaptive, { nom_ecrit: true })).toBe('point');
+  });
+
+  it('ignore une variante dont le flag attendu ne correspond pas', () => {
+    expect(resolveDialogueStart(adaptive, { rature_jamais: false })).toBe('neutre');
+  });
+});
+
 describe('parseDialogueData — validation des données', () => {
   it('accepte un dialogue bien formé', () => {
     expect(parseDialogueData(JSON.parse(JSON.stringify(data)))).toBeTruthy();
@@ -81,6 +111,16 @@ describe('parseDialogueData — validation des données', () => {
 
   it('rejette un start cassé', () => {
     expect(() => parseDialogueData({ id: 'x', start: 'nope', nodes: {} })).toThrow();
+  });
+
+  it('rejette une référence startVariants cassée', () => {
+    const broken = {
+      id: 'x',
+      start: 'a',
+      startVariants: [{ when: { flag: true }, start: 'inexistant' }],
+      nodes: { a: { speaker: 's', text: 't' } },
+    };
+    expect(() => parseDialogueData(broken)).toThrow(/inexistant/);
   });
 
   it('rejette une racine invalide', () => {

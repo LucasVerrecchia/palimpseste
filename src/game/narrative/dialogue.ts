@@ -4,17 +4,21 @@
  * (dialogue_box) ne fait qu'afficher l'état courant.
  *
  * Schéma d'un dialogue :
- *   { id, start, nodes: { [nodeId]: { speaker, text, next?, choices?, effects? } } }
+ *   { id, start, startVariants?, nodes: { [nodeId]: { speaker, text, next?, choices?, effects? } } }
  * - `next` absent et pas de choix → le dialogue se termine après ce nœud.
  * - `effects` d'un nœud sont produits quand on ENTRE dans ce nœud.
  * - Les choix peuvent porter leurs propres `effects` (produits à la sélection).
+ * - `startVariants` (optionnel) : un PNJ **unique** peut réagir différemment
+ *   selon les choix déjà faits par le joueur (storyFlags), sans que ce soit
+ *   deux personnages contradictoires — même histoire, réaction différente.
+ *   Même principe que `resolveSentence` (narrative/deviation.ts) : la
+ *   variante la plus spécifique dont les conditions `when` sont remplies
+ *   l'emporte ; à défaut, `start` sert de nœud de départ par défaut.
  */
 
-export interface DialogueEffect {
-  type: 'set_flag';
-  flag: string;
-  value: boolean | number;
-}
+export type DialogueEffect =
+  | { type: 'set_flag'; flag: string; value: boolean | number }
+  | { type: 'set_leaning'; delta: number };
 
 export interface DialogueChoice {
   text: string;
@@ -30,9 +34,16 @@ export interface DialogueNode {
   effects?: DialogueEffect[];
 }
 
+/** Variante de nœud de départ : `start` utilisé quand tous les flags de `when` correspondent. */
+export interface DialogueStartVariant {
+  when: Record<string, boolean>;
+  start: string;
+}
+
 export interface DialogueData {
   id: string;
   start: string;
+  startVariants?: readonly DialogueStartVariant[];
   nodes: Record<string, DialogueNode>;
 }
 
@@ -54,9 +65,37 @@ function nodeOrThrow(data: DialogueData, nodeId: string): DialogueNode {
   return node;
 }
 
-export function startDialogue(data: DialogueData): DialogueStep {
-  const node = nodeOrThrow(data, data.start);
-  return { state: { nodeId: data.start }, effects: node.effects ?? [] };
+export function startDialogue(data: DialogueData, startNodeId: string = data.start): DialogueStep {
+  const node = nodeOrThrow(data, startNodeId);
+  return { state: { nodeId: startNodeId }, effects: node.effects ?? [] };
+}
+
+/**
+ * Résout le nœud de départ réel d'un dialogue selon les flags déjà posés
+ * (storyFlags) : la variante la plus spécifique (le plus de conditions)
+ * dont toutes les conditions `when` sont satisfaites l'emporte, sinon
+ * `data.start`. Permet à un PNJ unique de réagir différemment à un choix
+ * déjà fait sans dupliquer le personnage. Fonction pure, testée.
+ */
+export function resolveDialogueStart(data: DialogueData, flags: Record<string, boolean | number>): string {
+  let best: string | null = null;
+  let bestScore = -1;
+  for (const variant of data.startVariants ?? []) {
+    let matches = true;
+    let score = 0;
+    for (const [flag, expected] of Object.entries(variant.when)) {
+      if ((flags[flag] === true) !== expected) {
+        matches = false;
+        break;
+      }
+      score++;
+    }
+    if (matches && score > bestScore) {
+      best = variant.start;
+      bestScore = score;
+    }
+  }
+  return best ?? data.start;
 }
 
 export function currentNode(data: DialogueData, state: DialogueState): DialogueNode | null {
@@ -126,5 +165,6 @@ export function parseDialogueData(raw: unknown): DialogueData {
     check(node.next, nodeId);
     for (const choice of node.choices ?? []) check(choice.next, nodeId);
   }
+  for (const variant of data.startVariants ?? []) check(variant.start, 'startVariants');
   return data;
 }
