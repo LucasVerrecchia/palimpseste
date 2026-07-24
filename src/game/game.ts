@@ -68,6 +68,7 @@ import { parseSave, SAVE_KEY, SAVE_VERSION, type SaveData } from './save';
 import { drawDialogueBox } from './ui/dialogue_box';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
 import { drawPauseMenu, PAUSE_MENU_OPTIONS, type PauseView } from './ui/pause_menu';
+import { renderBackdrop } from './world/backdrop';
 import { Room } from './world/room';
 import {
   applyLeaning,
@@ -1115,6 +1116,15 @@ export class Game {
     ctx.drawImage(this.paper, 0, 0);
     ctx.restore();
 
+    renderBackdrop(
+      ctx,
+      this.room.id,
+      this.camera.x,
+      this.camera.y,
+      this.room.pixelWidth,
+      this.room.pixelHeight,
+      this.time,
+    );
     this.renderParallaxDecor(ctx);
 
     ctx.save();
@@ -1157,64 +1167,19 @@ export class Game {
   }
 
   /**
-   * Décor en parallaxe : défile plus lentement que le premier plan (facteur
-   * `RENDERING.parallaxFactor` < 1), pour lire comme de l'arrière-plan plutôt
-   * que comme des éléments calés pile sur un objet de jeu — retour de Lucas
-   * (2026-07-22) sur la première version, qui cachait l'illustration
-   * exactement derrière la barrière-canon « enfermé ».
+   * Décor narratif ponctuel en parallaxe : défile plus lentement que le
+   * premier plan (facteur `RENDERING.parallaxFactor` < 1), pour lire comme
+   * de l'arrière-plan plutôt que comme des éléments calés pile sur un objet
+   * de jeu. Ne reste ici que la main du mi-boss (chapitre_01) — la
+   * silhouette derrière les barreaux et la silhouette "écrite" de marge_01
+   * ont été retirées (retour de Lucas, 2026-07-22) au profit du vrai fond
+   * lointain (`renderBackdrop`, `game/world/backdrop.ts`).
    */
   private renderParallaxDecor(ctx: CanvasRenderingContext2D): void {
     const f = RENDERING.parallaxFactor;
     ctx.save();
     ctx.translate(-this.camera.x * f, -this.camera.y * f);
-    this.renderStoryDecor(ctx);
-    this.renderWrittenSelfDecor(ctx);
     this.renderBossArenaDecor(ctx);
-    ctx.restore();
-  }
-
-  /**
-   * La Marge dit que le mot « resta enfermé [...] et n'en sortit jamais » —
-   * silhouette assise derrière des barreaux, esquisse au trait, révélée une
-   * fois « enfermé » raturé (même déclencheur qu'avant), mais désormais en
-   * arrière-plan parallaxe plutôt que pile calée sur la barrière-canon —
-   * retour de Lucas (2026-07-22). Spécifique à La Marge : chapitre_01 est un
-   * blockout sans narration (D13).
-   */
-  private renderStoryDecor(ctx: CanvasRenderingContext2D): void {
-    if (this.room.id !== 'marge_01' || this.storyFlags['efface_enferme'] !== true) return;
-    const x = 14 * TILE_SIZE;
-    const y = 8 * TILE_SIZE;
-    const w = 32;
-    const h = 6 * TILE_SIZE;
-
-    ctx.save();
-    ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.4);
-    ctx.lineWidth = 1;
-    ctx.lineCap = 'round';
-
-    // Barreaux verticaux.
-    for (let i = 1; i < 4; i++) {
-      const bx = x + (w * i) / 4;
-      ctx.beginPath();
-      ctx.moveTo(bx, y + 4);
-      ctx.lineTo(bx, y + h - 4);
-      ctx.stroke();
-    }
-
-    // Silhouette assise, genoux repliés, tête basse — un seul trait continu.
-    const cx = x + w / 2;
-    const cy = y + h - 18;
-    ctx.beginPath();
-    ctx.arc(cx, cy - 11, 4, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx + 1, cy - 7);
-    ctx.quadraticCurveTo(cx - 6, cy - 2, cx - 5, cy + 6);
-    ctx.quadraticCurveTo(cx - 4, cy + 13, cx, cy + 12);
-    ctx.quadraticCurveTo(cx + 4, cy + 13, cx + 5, cy + 6);
-    ctx.quadraticCurveTo(cx + 6, cy - 2, cx - 1, cy - 7);
-    ctx.stroke();
     ctx.restore();
   }
 
@@ -1224,8 +1189,8 @@ export class Game {
    * la main de l'Auteur qui « corrige » le texte, sans ajouter de PNJ ni de
    * texte (chapitre_01 reste un blockout mécanique, D13 : c'est une
    * illustration, pas de la narration écrite). Idée validée avec Lucas
-   * (2026-07-22), même esprit que `renderStoryDecor` : un-line, fixe, teinte
-   * sépia à faible opacité pour rester lisiblement de l'arrière-plan.
+   * (2026-07-22) : un-line, fixe, teinte sépia à faible opacité pour rester
+   * lisiblement de l'arrière-plan.
    */
   private renderBossArenaDecor(ctx: CanvasRenderingContext2D): void {
     if (this.room.id !== 'chapitre_01') return;
@@ -1443,48 +1408,6 @@ export class Game {
       ctx.textBaseline = 'alphabetic';
       this.renderCanonHint(ctx, blank, 'trace ton encre ici');
     }
-  }
-
-  /**
-   * Une fois un blanc ▢ comblé d'encre, une silhouette debout, bras ouverts,
-   * se tient là où était le vide : « Tu t'écris dans la phrase » (D11) rendu
-   * visible, pas seulement raconté. Rendue dans la passe de parallaxe (voir
-   * `renderParallaxDecor`) plutôt qu'à l'exacte place du blanc — retour de
-   * Lucas (2026-07-22) : un décor d'arrière-plan, pas un remplacement pile
-   * calé sur l'objet de jeu.
-   */
-  private renderWrittenSelfDecor(ctx: CanvasRenderingContext2D): void {
-    for (const blank of this.canonBlanks) {
-      if (this.collectedObjects.has(blank.id)) this.renderWrittenSelf(ctx, blank);
-    }
-  }
-
-  private renderWrittenSelf(ctx: CanvasRenderingContext2D, blank: RoomObject): void {
-    const cx = blank.x + blank.width / 2;
-    const groundY = blank.y;
-    ctx.save();
-    ctx.translate(cx, groundY);
-    ctx.strokeStyle = hexAlpha(PALETTE.unwritten, 0.8);
-    ctx.lineWidth = 1.3;
-    ctx.lineCap = 'round';
-    ctx.shadowColor = PALETTE.unwritten;
-    ctx.shadowBlur = 5;
-    // Tête
-    ctx.beginPath();
-    ctx.arc(0, -18, 2.6, 0, Math.PI * 2);
-    ctx.stroke();
-    // Tronc + bras grands ouverts + jambes, en un seul trait.
-    ctx.beginPath();
-    ctx.moveTo(-8, -10);
-    ctx.lineTo(8, -10);
-    ctx.moveTo(0, -15);
-    ctx.lineTo(0, -3);
-    ctx.moveTo(0, -3);
-    ctx.lineTo(-4, 0);
-    ctx.moveTo(0, -3);
-    ctx.lineTo(4, 0);
-    ctx.stroke();
-    ctx.restore();
   }
 
   /** Étiquette d'action au-dessus d'un mot-loi, seulement quand il est à portée. */

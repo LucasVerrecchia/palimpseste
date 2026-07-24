@@ -164,4 +164,46 @@ danger #C1362B, non-écrit #CFE3E8.
   - IA du mi-boss affinée : vitesse de poursuite ondulante (jamais plus vite
     qu'avant, juste moins mécanique qu'un suivi 1:1 comme la Rature).
   - 130 tests, `tsc`/`eslint`/`vite build` verts.
-- Phases 2b-4 : à venir (attendre validation humaine entre chaque étape).
+- **Septième round (2026-07-22) — vrai fond en parallaxe (D14)** : jusqu'ici
+  l'arrière-plan n'était que la texture papier (statique) + les 3 petites
+  illustrations narratives ponctuelles (facteur 0.85, liées à un évènement).
+  Retour de Lucas : il manquait un vrai décor de fond, continu, loin derrière,
+  pour renforcer la profondeur — pas un élément "dans" le niveau.
+  - `engine/parallax.ts` (générique, engine n'importe jamais game) :
+    `tileIndicesCovering` calcule quels indices de motif tuiler pour couvrir
+    tout l'écran quelle que soit la caméra ; `seededRandom` pour varier un
+    motif répété sans état à stocker (même principe que `renderCrack`).
+  - `game/world/backdrop.ts` : posé d'abord comme 2 motifs séparés à
+    comparer (un par salle, « palimpseste fantôme » lignes d'écriture pour
+    marge_01 vs « paysage d'encre » collines pour chapitre_01) — retour de
+    Lucas après essai en jeu : les deux plaisent, à **combiner** plutôt qu'à
+    choisir (les lignes lisent bien comme du vent au-dessus des collines).
+    Fond définitif, dans toutes les salles (`resolveBackdropKind`) : 7 plans
+    (facteurs 0.08 → 0.72 dans `BACKDROP`, `config.ts`), rendus juste après
+    la texture papier — soleil, nuages, collines lointaines, traînées de
+    vent, collines intermédiaires, arbres, oiseaux (ailes animées via
+    `time`). Seed décalée par un hash de l'id de salle pour varier
+    l'agencement sans dupliquer la recette.
+  - Retiré à la même occasion (retour de Lucas) : les 2 illustrations
+    narratives ponctuelles de marge_01 (silhouette derrière les barreaux,
+    silhouette "écrite" bras ouverts) — jugées redondantes avec le nouveau
+    fond. La main du mi-boss (chapitre_01) reste, non concernée.
+  - 138 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    (screenshots Playwright headless) dans les deux salles.
+- **Huitième round (2026-07-24)** — retouches du fond en parallaxe après
+  playtest de Lucas ("globalement ça va") :
+  - Arbres : houppier en amas de 3 touffes (au lieu d'un seul rond) + 2
+    petites branches + touches de feuillage plus sombres, silhouette moins
+    géométrique.
+  - Oiseaux : légèrement plus fréquents (seuil d'apparition par tuile
+    abaissé).
+  - Soleil : rayons esquissés (traits radiaux irréguliers) pour coller à la
+    DA "dessin".
+  - 138 tests (inchangé), `tsc`/`eslint` verts.
+- Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond
+  terminées et playtestées. **Manquant pour la conformité au brief** : PNJ
+  secondaire + dialogues (aucun n'existe encore), zones/niveaux
+  supplémentaires (spec en prévoit 5 + climax, 2 salles construites),
+  `endings.ts`/`resolveEnding` + salle climax "La Page Blanche" + pouvoir
+  POINT (2 fins obligatoires). Prochaine étape à discuter avec Lucas (voir
+  session en cours).

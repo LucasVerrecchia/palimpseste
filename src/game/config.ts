@@ -164,6 +164,34 @@ export const RENDERING = {
   parallaxFactor: 0.85,
 } as const;
 
+/**
+ * Fond lointain en parallaxe (décision D14, 2026-07-22 ; combiné le même
+ * jour après retour de Lucas — cf. `game/world/backdrop.ts`). Contrairement
+ * à `RENDERING.parallaxFactor` (décor narratif ponctuel, lié à un
+ * évènement), ce fond est un environnement continu présent partout dans la
+ * salle : soleil, nuages, collines, traînées de vent, arbres et oiseaux, en
+ * 7 plans à des facteurs croissants (plus proche = défile plus vite = plus
+ * grand facteur), pour un vrai effet de profondeur ("loin derrière et
+ * grand", retour de Lucas). Les plans tuilés horizontalement (tous sauf le
+ * soleil, unique par salle) utilisent `engine/parallax.ts` pour couvrir tout
+ * l'écran quelle que soit la position caméra.
+ */
+export const BACKDROP = {
+  sunFactor: 0.08,
+  cloudsFactor: 0.15,
+  cloudsTileWidth: 340,
+  mountainsFarFactor: 0.22,
+  mountainsFarTileWidth: 260,
+  windFactor: 0.32,
+  windTileWidth: 220,
+  mountainsMidFactor: 0.5,
+  mountainsMidTileWidth: 200,
+  treesFactor: 0.6,
+  treesTileWidth: 100,
+  birdsFactor: 0.72,
+  birdsTileWidth: 260,
+} as const;
+
 /** Particules d'encre et ambiance. */
 export const PARTICLES = {
   maxCount: 260,
