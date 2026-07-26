@@ -32,6 +32,7 @@ export function drawPauseMenu(
   selected: number,
   abilities: readonly AbilityDef[],
   unlocked: ReadonlySet<string>,
+  leaningLines: readonly [string, string],
 ): void {
   ctx.fillStyle = hexAlpha(PALETTE.ink, 0.5);
   ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
@@ -40,7 +41,7 @@ export function drawPauseMenu(
   const x = (INTERNAL_WIDTH - width) / 2;
 
   if (view === 'menu') {
-    const height = 34 + PAUSE_MENU_OPTIONS.length * 22 + 8;
+    const height = 34 + 18 + PAUSE_MENU_OPTIONS.length * 22 + 8;
     const y = (INTERNAL_HEIGHT - height) / 2;
     panel(ctx, x, y, width, height);
 
@@ -49,9 +50,19 @@ export function drawPauseMenu(
     ctx.font = 'italic bold 13px Georgia, serif';
     ctx.fillText('Pause', x + width / 2, y + 20);
 
+    // Voie narrative actuelle (retour de playtest 2026-07-26) : repère
+    // persistant et consultable à tout moment, contrairement au toast qui
+    // s'affiche une fois puis disparaît.
+    ctx.font = 'bold 9px Georgia, serif';
+    ctx.fillStyle = PALETTE.ink;
+    ctx.fillText(leaningLines[0], x + width / 2, y + 32);
+    ctx.font = 'italic 8px Georgia, serif';
+    ctx.fillStyle = hexAlpha(PALETTE.sepia, 0.85);
+    ctx.fillText(leaningLines[1], x + width / 2, y + 42);
+
     ctx.font = '11px Georgia, serif';
     PAUSE_MENU_OPTIONS.forEach((label, i) => {
-      const oy = y + 42 + i * 22;
+      const oy = y + 42 + 18 + i * 22;
       const isSelected = i === selected;
       if (isSelected) {
         const w = ctx.measureText(label).width + 24;

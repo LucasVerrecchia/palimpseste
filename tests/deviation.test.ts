@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyLeaning,
   isBlankFilled,
+  isDeviationLocked,
   objectTiles,
+  resolveLeaning,
   resolveSentence,
   type SentenceVariant,
 } from '../src/game/narrative/deviation';
@@ -51,6 +53,40 @@ describe('applyLeaning — geste → penchant de fin', () => {
   });
   it('compléter penche vers POINT FINAL (positif)', () => {
     expect(applyLeaning(-1, 1)).toBe(0); // faire les deux → neutre (palimpseste)
+  });
+});
+
+describe('isDeviationLocked — exclusivité mutuelle RATURE / POINT FINAL', () => {
+  it('jamais verrouillé sans exclusiveWith (ex. « enfermé », obstacle neutre)', () => {
+    expect(isDeviationLocked(undefined, { rature_jamais: true, nom_ecrit: true })).toBe(false);
+  });
+
+  it('déverrouillé tant que l\'autre voie n\'est pas engagée (le 3ᵉ cas "aucun des deux" reste possible)', () => {
+    expect(isDeviationLocked('nom_ecrit', {})).toBe(false);
+    expect(isDeviationLocked('rature_jamais', {})).toBe(false);
+  });
+
+  it('verrouillé une fois que l\'autre voie est engagée', () => {
+    expect(isDeviationLocked('nom_ecrit', { nom_ecrit: true })).toBe(true);
+    expect(isDeviationLocked('rature_jamais', { rature_jamais: true })).toBe(true);
+  });
+});
+
+describe('resolveLeaning — quelle voie le joueur a empruntée', () => {
+  it('aucun flag → indécise', () => {
+    expect(resolveLeaning({})).toBe('indecise');
+  });
+
+  it('rature_jamais → rature', () => {
+    expect(resolveLeaning({ rature_jamais: true })).toBe('rature');
+  });
+
+  it('nom_ecrit → point_final', () => {
+    expect(resolveLeaning({ nom_ecrit: true })).toBe('point_final');
+  });
+
+  it('rature_jamais est prioritaire si les deux sont vrais (ne devrait pas arriver, exclusivité mutuelle)', () => {
+    expect(resolveLeaning({ rature_jamais: true, nom_ecrit: true })).toBe('rature');
   });
 });
 

@@ -1,0 +1,21 @@
+{
+  "id": "chapitre_01",
+  "title": "Le Chapitre Premier",
+  "_comment": "[proposition narration — à valider avec Lucas]. Reskin du mi-boss selon le penchant choisi en marge_01 (même boss mécanique, résolveur pur resolveBossFlavor : la variante satisfaite la plus spécifique gagne). Le nom du monstre de conte (\"le Troll d'Encre\") est une proposition ouverte, tout comme dragon/troll/orc suggérés par Lucas — à confirmer ou renommer.",
+  "bossFlavorVariants": [
+    {
+      "when": {},
+      "name": "le Troll d'Encre",
+      "label": "T",
+      "defeatToast": "Le Troll d'Encre est vaincu.",
+      "decor": "creature"
+    },
+    {
+      "when": { "rature_jamais": true },
+      "name": "La Marge",
+      "label": "M",
+      "defeatToast": "La Marge est corrigée.",
+      "decor": "hand_quill"
+    }
+  ]
+}

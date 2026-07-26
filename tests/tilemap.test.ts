@@ -230,6 +230,14 @@ describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)',
     expect(door?.x).toBeGreaterThan(51 * 16);
     expect(door?.properties['endsChapter']).toBe('chapitre1');
   });
+
+  it('la cible de la porte vers chapitre_01 atterrit dans son corridor, pas au-dessus (D16, bug de spawn 2026-07-26)', () => {
+    const door = map.objects.find((o) => o.type === 'door');
+    // chapitre_01 a translaté tout son corridor de OFFSET=17 rangées (272px)
+    // vers le bas ; une cible non traduite atterrissait au-dessus du plafond
+    // du corridor, dans le vide nouvellement ajouté.
+    expect(door?.properties['targetY']).toBeGreaterThan(17 * 16);
+  });
 });
 
 describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réelles)', () => {
@@ -244,31 +252,68 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(map.filigrane).not.toBeNull();
   });
 
+  it('la salle est genuinement plus haute qu\'une vue d\'écran (D16, défilement vertical de la caméra)', () => {
+    // Vue interne 480×270 = 16.875 tuiles de haut (config.ts) ; la salle
+    // double cette hauteur pour l'arène verticale du mi-boss.
+    expect(map.heightTiles).toBeGreaterThan(20);
+  });
+
   it('le mur du premier obstacle bloque le sol mais laisse de la place pour passer par-dessus', () => {
     // Colonne 14 (voir tools/gen_room_chapitre01.mjs) : pas de mot-pouvoir associé
     // depuis le retrait d'ANCRE — se franchit en traçant des plateformes d'encre.
+    // OFFSET (17 rangées, D16) translate tout le corridor d'origine vers le bas.
     const col = 14;
+    const OFFSET = 17;
     // Solide du sol jusqu'à une bonne hauteur...
-    for (let ty = 6; ty <= 16; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
-    // ...mais pas jusqu'au plafond : on peut s'y tracer un escalier et passer par-dessus.
-    expect(gidAt(map, col, 1)).toBe(0);
-    expect(gidAt(map, col, 2)).toBe(0);
+    for (let ty = 6 + OFFSET; ty <= 16 + OFFSET; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
+    // ...mais pas jusqu'au plafond du corridor : on peut s'y tracer un escalier et passer par-dessus.
+    expect(gidAt(map, col, 1 + OFFSET)).toBe(0);
+    expect(gidAt(map, col, 2 + OFFSET)).toBe(0);
   });
 
-  it('le gouffre AILES coupe le sol sur plusieurs tuiles', () => {
-    let gapWidth = 0;
-    for (let tx = 1; tx < map.widthTiles - 1; tx++) {
-      if (gidAt(map, tx, 14) === 0 && gidAt(map, tx, 16) === 0) gapWidth++;
-    }
-    expect(gapWidth).toBeGreaterThanOrEqual(4);
-  });
-
-  it('le mur BRÈCHE est plein du sol au plafond (aucun passage par-dessus)', () => {
-    const wall = map.objects.find((o) => o.type === 'breche_wall');
+  it('le mur BRÈCHE est plein du sol au plafond dans le calque ground (aucun passage par-dessus)', () => {
+    const wall = map.objects.find((o) => o.name === 'mur_breche');
     expect(wall).toBeDefined();
     const col = Math.floor((wall?.x ?? 0) / 16);
-    for (let ty = 0; ty <= 16; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
     expect(wall?.properties['flag']).toBeTypeOf('string');
+  });
+
+  it('le mur BRÈCHE est entièrement cassable, sol au plafond (mur simple, D16-bis : retour de playtest 2026-07-26, pas de grimpe obligatoire pour lui)', () => {
+    const wall = map.objects.find((o) => o.name === 'mur_breche');
+    expect(wall).toBeDefined();
+    // L'objet BRÈCHE enregistré couvre TOUTE la hauteur de la salle (pas
+    // seulement une bande) : premier mur BRÈCHE du jeu, cassable depuis le
+    // sol comme avant le rehaussement de la salle.
+    expect(wall?.y).toBe(0);
+    expect(wall?.height).toBe(map.heightTiles * 16);
+    // Pas de crackY/crackHeight : la fissure (rendu, game.ts `crackRectOf`)
+    // couvre donc tout le mur par défaut.
+    expect(wall?.properties['crackY']).toBeUndefined();
+  });
+
+  it('deux murs BRÈCHE "points faibles" dans l\'arène : mur plein entier, mais fissure (et donc l\'endroit à atteindre) restreinte en hauteur (retour de playtest 2026-07-26, précisé D16-bis)', () => {
+    const gauntletWalls = map.objects.filter((o) => o.type === 'breche_wall' && o.name !== 'mur_breche');
+    expect(gauntletWalls).toHaveLength(2);
+    for (const wall of gauntletWalls) {
+      const col = Math.floor(wall.x / 16);
+      // La colonne entière est solide dans "ground"...
+      for (let ty = 0; ty < map.heightTiles; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
+      // ...et l'objet BRÈCHE lui-même couvre TOUTE la hauteur (casser
+      // n'importe où dans cet objet ouvre tout le mur d'un coup, même
+      // mécanique tout-ou-rien que le mur simple ci-dessus).
+      expect(wall.y).toBe(0);
+      expect(wall.height).toBe(map.heightTiles * 16);
+      expect(typeof wall.properties['flag']).toBe('string');
+      // Seule la fissure DESSINÉE est restreinte à une bande étroite : il
+      // faut grimper jusque-là pour la voir/l'atteindre en premier.
+      expect(typeof wall.properties['crackY']).toBe('number');
+      expect(wall.properties['crackHeight']).toBeLessThan((map.heightTiles * 16) / 4);
+    }
+    // Hauteurs de fissure différentes : un point faible en haut de l'arène, un plus bas.
+    const crackYs = gauntletWalls.map((w) => w.properties['crackY'] as number).sort((a, b) => a - b);
+    expect(crackYs[0]).toBeLessThan(10 * 16);
+    expect(crackYs[1]).toBeGreaterThan(15 * 16);
   });
 
   it('contient les ennemis communs et le mi-boss, aucun PNJ ni phrase-loi', () => {
@@ -279,22 +324,20 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(map.objects.some((o) => o.type === 'canon')).toBe(false);
   });
 
-  it('offre un encrier avant l\'arène du mi-boss (retour de playtest 2026-07-22)', () => {
-    const inkwell = map.objects.find((o) => o.type === 'inkwell');
+  it('offre deux encriers avant l\'arène du mi-boss (D16 : un après le premier mur, un avant le puits d\'escalade)', () => {
+    const inkwells = map.objects.filter((o) => o.type === 'inkwell');
     const boss = map.objects.find((o) => o.type === 'boss');
-    expect(inkwell).toBeDefined();
-    expect(inkwell?.x ?? 0).toBeLessThan(boss?.x ?? 0);
+    expect(inkwells).toHaveLength(2);
+    for (const inkwell of inkwells) expect(inkwell.x).toBeLessThan(boss?.x ?? 0);
   });
 
-  it('offre un mot-pouvoir pour chacun des 3 pouvoirs restants, avant son obstacle', () => {
+  it('offre un mot-pouvoir pour chacun des 2 pouvoirs restants (D16 : AILES retiré), avant son obstacle', () => {
     const words = map.objects.filter((o) => o.type === 'word');
     const abilities = words.map((w) => w.properties['ability']);
-    expect(new Set(abilities)).toEqual(new Set(['hate', 'ales', 'breche']));
+    expect(new Set(abilities)).toEqual(new Set(['hate', 'breche']));
 
     const xOf = (ability: string) => words.find((w) => w.properties['ability'] === ability)?.x ?? -1;
-    const gouffreCol = 26;
-    const brecheCol = Math.floor((map.objects.find((o) => o.type === 'breche_wall')?.x ?? 0) / 16);
-    expect(xOf('ales')).toBeLessThan(gouffreCol * 16);
+    const brecheCol = Math.floor((map.objects.find((o) => o.name === 'mur_breche')?.x ?? 0) / 16);
     expect(xOf('breche')).toBeLessThan(brecheCol * 16);
   });
 
@@ -308,7 +351,7 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
   });
 
   it('laisse assez d\'espace entre la BRÈCHE et le mi-boss (arène, pas un couloir)', () => {
-    const wall = map.objects.find((o) => o.type === 'breche_wall');
+    const wall = map.objects.find((o) => o.name === 'mur_breche');
     const boss = map.objects.find((o) => o.type === 'boss');
     expect((boss?.x ?? 0) - (wall?.x ?? 0)).toBeGreaterThan(18 * 16);
   });
@@ -320,13 +363,14 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
   });
 
-  it('porte vers ratures_01, au-delà de l\'arène du mi-boss (D15)', () => {
+  it('porte vers ratures_01, au-delà de l\'arène du mi-boss (D15), verrouillée tant que le mi-boss n\'est pas vaincu (retour de playtest 2026-07-26)', () => {
     const doors = map.objects.filter((o) => o.type === 'door');
     expect(doors).toHaveLength(2);
     const forward = doors.find((o) => o.properties['targetRoom'] === 'ratures_01');
     const boss = map.objects.find((o) => o.type === 'boss');
     expect(forward).toBeDefined();
     expect(forward?.x ?? 0).toBeGreaterThan(boss?.x ?? 0);
+    expect(forward?.properties['requiresFlag']).toBe('boss_coquille_majuscule_vaincu');
     // Contour toujours fermé malgré l'élargissement de la salle (W=74).
     for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
     for (let ty = 0; ty < map.heightTiles; ty++) {

@@ -102,6 +102,9 @@ const objects = [
       prop('text', 'string', 'toi'),
       prop('flag', 'string', 'nom_ecrit'),
       prop('leaning', 'int', 1),
+      // Exclusivité mutuelle (retour de playtest 2026-07-26) : une fois
+      // raturé "jamais", ce blanc ne peut plus être comblé.
+      prop('exclusiveWith', 'string', 'rature_jamais'),
     ],
   },
   // « jamais » (route RATURE) : barrage-canon au sol, à raturer pour ouvrir la
@@ -113,6 +116,9 @@ const objects = [
       prop('text', 'string', 'jamais'),
       prop('flag', 'string', 'rature_jamais'),
       prop('leaning', 'int', -1),
+      // Exclusivité mutuelle (retour de playtest 2026-07-26) : une fois le
+      // blanc ▢ comblé, ce mot ne peut plus être raturé.
+      prop('exclusiveWith', 'string', 'nom_ecrit'),
     ],
   },
 
@@ -129,7 +135,12 @@ const objects = [
     properties: [
       prop('targetRoom', 'string', 'chapitre_01'),
       prop('targetX', 'int', 64),
-      prop('targetY', 'int', 202),
+      // targetY = 202 + OFFSET*16 (OFFSET=17, D16) : chapitre_01 a doublé de
+      // hauteur pour l'arène verticale du mi-boss, tout son corridor
+      // d'origine a été translaté vers le bas d'autant. Sans cette
+      // translation on atterrit au-dessus du plafond du corridor, dans le
+      // vide nouvellement ajouté (bug de spawn signalé en playtest 2026-07-26).
+      prop('targetY', 'int', 474),
       prop('endsChapter', 'string', 'chapitre1'),
     ],
   },

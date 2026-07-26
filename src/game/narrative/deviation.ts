@@ -55,6 +55,35 @@ export function applyLeaning(current: number, delta: number): number {
 }
 
 /**
+ * Une déviation est verrouillée si le joueur s'est déjà engagé dans l'autre
+ * voie mutuellement exclusive (retour de playtest 2026-07-26 : pouvoir
+ * raturer ET compléter créait de la confusion sur l'issue réelle). Le 3ᵉ cas
+ * — n'avoir choisi ni l'un ni l'autre — reste volontairement possible : cette
+ * fonction ne verrouille rien tant qu'aucun choix n'a été fait.
+ */
+export function isDeviationLocked(
+  exclusiveWith: string | undefined,
+  flags: Record<string, boolean | number>,
+): boolean {
+  return exclusiveWith !== undefined && flags[exclusiveWith] === true;
+}
+
+/** Le penchant narratif du joueur, dérivé des deux flags de déviation. */
+export type Leaning = 'rature' | 'point_final' | 'indecise';
+
+/**
+ * Quelle voie le joueur a-t-il empruntée jusqu'ici ? Retour de playtest
+ * 2026-07-26 : sans repère persistant, un joueur qui a bien raturé ou comblé
+ * un mot-loi ne se souvient plus « dans quel axe » il se trouve. Simple
+ * lecture des deux flags que `tryRatureCanon`/`checkBlanks` posent déjà.
+ */
+export function resolveLeaning(flags: Record<string, boolean | number>): Leaning {
+  if (flags['rature_jamais'] === true) return 'rature';
+  if (flags['nom_ecrit'] === true) return 'point_final';
+  return 'indecise';
+}
+
+/**
  * Une variante de la phrase-loi : une phrase entière et grammaticalement
  * cohérente, affichée quand toutes les conditions `when` sont satisfaites.
  */

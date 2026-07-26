@@ -74,16 +74,21 @@ import { Room } from './world/room';
 import {
   applyLeaning,
   isBlankFilled,
+  isDeviationLocked,
   objectTiles,
+  resolveLeaning,
   resolveSentence,
+  type Leaning,
   type SentenceVariant,
 } from './narrative/deviation';
+import { resolveBossFlavor, type BossFlavorVariant } from './narrative/boss_flavor';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
 import dialoguePnjRatures from '../data/dialogues/pnj_ratures.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
 import roomChapitre01 from '../data/rooms/chapitre_01.json';
 import roomRatures01 from '../data/rooms/ratures_01.json';
 import chapterMarge01 from '../data/chapters/marge_01.json';
+import chapterChapitre01 from '../data/chapters/chapitre_01.json';
 
 /**
  * Registre des salles chargeables (Phase 2, D13) : au lieu d'une seule salle
@@ -97,6 +102,18 @@ const ROOMS: Record<string, unknown> = {
 };
 
 const DEFAULT_ROOM_ID = 'marge_01';
+
+/**
+ * Texte du repère de voie narrative (menu pause) — [proposition], à valider
+ * avec Lucas comme le reste du texte visible. Retour de playtest
+ * 2026-07-26 : sans repère persistant, impossible de savoir a posteriori
+ * dans quel axe on se trouve.
+ */
+const LEANING_LINES: Record<Leaning, readonly [string, string]> = {
+  rature: ['Voie : RATURE', 'tu restes hors du récit'],
+  point_final: ['Voie : POINT FINAL', 'tu continues le récit'],
+  indecise: ['Voie : indécise', 'les deux voies restent ouvertes'],
+};
 
 /** Lecture défensive des variantes de phrase (import JSON → type sûr). */
 function parseSentenceVariants(raw: readonly unknown[]): SentenceVariant[] {
@@ -113,6 +130,33 @@ function parseSentenceVariants(raw: readonly unknown[]): SentenceVariant[] {
       }
     }
     variants.push({ when, text: obj['text'] });
+  }
+  return variants;
+}
+
+/** Lecture défensive des variantes de peau du mi-boss (import JSON → type sûr), même principe que parseSentenceVariants. */
+function parseBossFlavorVariants(raw: readonly unknown[]): BossFlavorVariant[] {
+  const variants: BossFlavorVariant[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const obj = entry as Record<string, unknown>;
+    const { name, label, defeatToast, decor } = obj;
+    if (
+      typeof name !== 'string' ||
+      typeof label !== 'string' ||
+      typeof defeatToast !== 'string' ||
+      (decor !== 'hand_quill' && decor !== 'creature')
+    ) {
+      continue;
+    }
+    const when: Record<string, boolean> = {};
+    const rawWhen = obj['when'];
+    if (typeof rawWhen === 'object' && rawWhen !== null) {
+      for (const [flag, value] of Object.entries(rawWhen as Record<string, unknown>)) {
+        if (typeof value === 'boolean') when[flag] = value;
+      }
+    }
+    variants.push({ when, name, label, defeatToast, decor });
   }
   return variants;
 }
@@ -174,6 +218,7 @@ export class Game {
    * (D11) — chapitre_01 (Phase 2, blockout mécanique) n'a pas de phrase-loi.
    */
   private readonly sentenceVariants = parseSentenceVariants(chapterMarge01.sentenceVariants);
+  private readonly bossFlavorVariants = parseBossFlavorVariants(chapterChapitre01.bossFlavorVariants);
 
   private player!: PlayerState;
   private enemies: Enemy[] = [];
@@ -672,7 +717,7 @@ export class Game {
       this.bus.emit('flag_set', { flag: 'boss_coquille_majuscule_vaincu', value: true });
       this.bus.emit('boss_defeated', { bossId: 'coquille_majuscule' });
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 24, PALETTE.danger, 80);
-      this.toast('La Coquille majuscule est corrigée.');
+      this.toast(resolveBossFlavor(this.bossFlavorVariants, this.storyFlags).defeatToast);
     } else if (boss.phase !== this.prevBossPhase && boss.phase === 'vulnerable') {
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 6, PALETTE.unwritten, 40);
       if (!this.bossHintShown) {
@@ -855,6 +900,14 @@ export class Game {
     if (objectId === null) return;
     const barrier = this.canonBarriers.find((o) => o.id === objectId);
     if (barrier === undefined || this.collectedObjects.has(barrier.id)) return;
+    const exclusiveWith = barrier.properties['exclusiveWith'];
+    if (isDeviationLocked(typeof exclusiveWith === 'string' ? exclusiveWith : undefined, this.storyFlags)) {
+      if (this.toastCooldown <= 0) {
+        this.toast("Cette voie s'est refermée : tu as déjà choisi."); // [proposition]
+        this.toastCooldown = 1.4;
+      }
+      return;
+    }
     if (!this.tileInReach(tx, ty)) {
       if (this.toastCooldown <= 0) {
         this.toast('Trop loin pour raturer, approche-toi du mot.');
@@ -873,7 +926,13 @@ export class Game {
     for (const tile of objectTiles(barrier)) {
       this.burst(tile.x * TILE_SIZE + 8, tile.y * TILE_SIZE + 8, 3, PALETTE.danger, 45);
     }
-    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » : le mot n'a plus de prise sur toi.`);
+    // [proposition] Rendre explicite le sens du choix, mais seulement pour
+    // une déviation qui pèse réellement sur la fin (leaning défini) — pas
+    // pour « enfermé », obstacle neutre d'apprentissage (retour de playtest
+    // 2026-07-26, symétrique au toast de checkBlanks).
+    const stakes =
+      typeof barrier.properties['leaning'] === 'number' ? " Tu choisis de rester en dehors de l'histoire." : '';
+    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » : le mot n'a plus de prise sur toi.${stakes}`);
   }
 
   /** Un blanc ▢ entièrement recouvert d'encre complète la phrase (déviation POINT FINAL). */
@@ -881,6 +940,12 @@ export class Game {
     for (const blank of this.canonBlanks) {
       if (this.collectedObjects.has(blank.id)) continue;
       if (!isBlankFilled(objectTiles(blank), (x, y) => this.room.hasInk(x, y))) continue;
+      const exclusiveWith = blank.properties['exclusiveWith'];
+      if (isDeviationLocked(typeof exclusiveWith === 'string' ? exclusiveWith : undefined, this.storyFlags)) {
+        this.collectedObjects.add(blank.id);
+        this.toast("Cette voie s'est refermée : tu as déjà choisi."); // [proposition]
+        continue;
+      }
       this.collectedObjects.add(blank.id);
       this.applyDeviation(blank);
       const reveal = blank.properties['text'];
@@ -889,7 +954,12 @@ export class Game {
         flag: typeof blank.properties['flag'] === 'string' ? blank.properties['flag'] : '',
       });
       this.burst(blank.x + blank.width / 2, blank.y + blank.height / 2, 14, PALETTE.unwritten, 50);
-      this.toast(`Tu t'écris dans la phrase : le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».`);
+      // [proposition] Même garde que tryRatureCanon : seulement si la
+      // déviation pèse réellement sur la fin (leaning défini).
+      const stakes = typeof blank.properties['leaning'] === 'number' ? ' Tu choisis de continuer l\'histoire.' : '';
+      this.toast(
+        `Tu t'écris dans la phrase : le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».${stakes}`,
+      );
     }
   }
 
@@ -1101,11 +1171,22 @@ export class Game {
    * empêche un aller-retour immédiat si le point d'arrivée chevauchait la
    * porte de destination. Une porte à `endsChapter` termine d'abord le
    * chapitre correspondant (voir `finalizeChapter1`) avant de transiter.
+   * `requiresFlag` (retour de playtest 2026-07-26) : reste fermée tant que
+   * ce flag n'est pas posé (ex. mi-boss vaincu) — pas de transition, un
+   * toast explique pourquoi.
    */
   private checkDoors(): void {
     if (this.doorCooldown > 0) return;
     const door = this.room.objectsOfType('door').find((o) => this.playerOverlaps(o));
     if (door === undefined) return;
+    const requiresFlag = door.properties['requiresFlag'];
+    if (typeof requiresFlag === 'string' && this.storyFlags[requiresFlag] !== true) {
+      if (this.toastCooldown <= 0) {
+        this.toast('La porte reste close : il faut d\'abord vaincre le mi-boss.'); // [proposition]
+        this.toastCooldown = 1.4;
+      }
+      return;
+    }
     if (door.properties['endsChapter'] === 'chapitre1') this.finalizeChapter1();
     const targetRoom = door.properties['targetRoom'];
     const targetX = door.properties['targetX'];
@@ -1175,7 +1256,14 @@ export class Game {
     }
 
     if (this.mode === 'paused') {
-      drawPauseMenu(ctx, this.pauseView, this.pauseSelected, allAbilities(), this.unlocked);
+      drawPauseMenu(
+        ctx,
+        this.pauseView,
+        this.pauseSelected,
+        allAbilities(),
+        this.unlocked,
+        LEANING_LINES[resolveLeaning(this.storyFlags)],
+      );
     }
   }
 
@@ -1197,16 +1285,27 @@ export class Game {
   }
 
   /**
-   * Décor d'arrière-plan de l'arène du mi-boss (chapitre_01) : une grande
-   * main tenant une plume raturée — rappelle que la Coquille majuscule est
-   * la main de l'Auteur qui « corrige » le texte, sans ajouter de PNJ ni de
-   * texte (chapitre_01 reste un blockout mécanique, D13 : c'est une
-   * illustration, pas de la narration écrite). Idée validée avec Lucas
-   * (2026-07-22) : un-line, fixe, teinte sépia à faible opacité pour rester
-   * lisiblement de l'arrière-plan.
+   * Décor d'arrière-plan de l'arène du mi-boss (chapitre_01) : choisit entre
+   * les deux peaux narratives selon le penchant du joueur (retour de
+   * playtest 2026-07-26, `resolveBossFlavor`) — même mi-boss mécanique,
+   * seul le décor change.
    */
   private renderBossArenaDecor(ctx: CanvasRenderingContext2D): void {
     if (this.room.id !== 'chapitre_01') return;
+    const flavor = resolveBossFlavor(this.bossFlavorVariants, this.storyFlags);
+    if (flavor.decor === 'hand_quill') this.renderHandQuillDecor(ctx);
+    else this.renderCreatureDecor(ctx);
+  }
+
+  /**
+   * Variante "La Marge" : une grande main tenant une plume raturée —
+   * rappelle que le boss est la main de l'Auteur qui « corrige » le texte,
+   * sans ajouter de PNJ ni de texte (chapitre_01 reste un blockout
+   * mécanique, D13 : c'est une illustration, pas de la narration écrite).
+   * Idée validée avec Lucas (2026-07-22) : un-line, fixe, teinte sépia à
+   * faible opacité pour rester lisiblement de l'arrière-plan.
+   */
+  private renderHandQuillDecor(ctx: CanvasRenderingContext2D): void {
     const cx = 62 * TILE_SIZE;
     const cy = 92;
 
@@ -1249,6 +1348,51 @@ export class Game {
     ctx.beginPath();
     ctx.moveTo(0, -40);
     ctx.lineTo(20, -22);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  /**
+   * Variante "monstre de conte" (le Troll d'Encre par défaut) : un museau
+   * simple — deux cornes courbes, une mâchoire dentée — même style un-line
+   * sépia à faible opacité que la main à la plume, pour rester lisiblement
+   * de l'arrière-plan. [proposition — silhouette générique, à retravailler
+   * une fois la créature confirmée avec Lucas]
+   */
+  private renderCreatureDecor(ctx: CanvasRenderingContext2D): void {
+    const cx = 62 * TILE_SIZE;
+    const cy = 92;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.3);
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Museau, vu de face, arrondi.
+    ctx.beginPath();
+    ctx.moveTo(-22, 26);
+    ctx.quadraticCurveTo(-28, -4, -10, -16);
+    ctx.quadraticCurveTo(0, -20, 10, -16);
+    ctx.quadraticCurveTo(28, -4, 22, 26);
+    ctx.stroke();
+
+    // Deux cornes courbes.
+    ctx.beginPath();
+    ctx.moveTo(-10, -14);
+    ctx.quadraticCurveTo(-16, -34, -8, -50);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(10, -14);
+    ctx.quadraticCurveTo(16, -34, 8, -50);
+    ctx.stroke();
+
+    // Mâchoire dentée, en travers du museau.
+    ctx.beginPath();
+    ctx.moveTo(-18, 10);
+    for (let x = -12; x <= 18; x += 6) ctx.lineTo(x, x % 12 === 0 ? 16 : 10);
     ctx.stroke();
 
     ctx.restore();
@@ -1343,29 +1487,52 @@ export class Game {
       if (this.collectedObjects.has(wall.id)) continue;
       // Fissure toujours visible (pas seulement à portée) : sans elle, le mur
       // était indiscernable d'un mur normal — retour de playtest 2026-07-22.
-      this.renderCrack(ctx, wall);
+      this.renderCrack(ctx, wall, this.crackRectOf(wall));
       if (hasAbility(this.unlocked, 'breche')) {
         this.renderCanonHint(ctx, wall, 'clic droit : brèche');
       }
     }
   }
 
-  /** Lézarde en zigzag, sur toute la hauteur de l'objet ; forme stable (seed = id). */
-  private renderCrack(ctx: CanvasRenderingContext2D, obj: RoomObject): void {
+  /**
+   * Rectangle où dessiner la fissure : par défaut le mur entier (premier mur
+   * BRÈCHE du jeu, entièrement cassable — la fissure doit couvrir tout pour
+   * enseigner le principe, retour de playtest 2026-07-26). `crackY`/
+   * `crackHeight` (optionnels) restreignent la fissure à un « point faible »
+   * plus étroit qu'un mur d'arène par ailleurs plein — mais casser ce point
+   * faible ouvre quand même TOUT le mur (même objet BRÈCHE, tout-ou-rien,
+   * mécanique inchangée depuis toujours) : seul l'endroit où grimper pour
+   * l'atteindre est visuellement plus précis.
+   */
+  private crackRectOf(wall: RoomObject): { x: number; y: number; width: number; height: number } {
+    const crackY = wall.properties['crackY'];
+    const crackHeight = wall.properties['crackHeight'];
+    if (typeof crackY === 'number' && typeof crackHeight === 'number') {
+      return { x: wall.x, y: crackY, width: wall.width, height: crackHeight };
+    }
+    return wall;
+  }
+
+  /** Lézarde en zigzag sur `rect` ; forme stable (seed = id du mur). */
+  private renderCrack(
+    ctx: CanvasRenderingContext2D,
+    obj: RoomObject,
+    rect: { x: number; y: number; width: number; height: number },
+  ): void {
     const seed = obj.id * 97;
     const rand = (i: number) => {
       const v = Math.sin(seed + i * 12.9898) * 43758.5453;
       return v - Math.floor(v);
     };
-    const cx = obj.x + obj.width / 2;
-    const steps = Math.max(3, Math.round(obj.height / 18));
+    const cx = rect.x + rect.width / 2;
+    const steps = Math.max(3, Math.round(rect.height / 18));
     ctx.strokeStyle = hexAlpha(PALETTE.danger, 0.55);
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.moveTo(cx + (rand(0) - 0.5) * obj.width * 0.4, obj.y + 2);
+    ctx.moveTo(cx + (rand(0) - 0.5) * rect.width * 0.4, rect.y + 2);
     for (let i = 1; i <= steps; i++) {
-      const y = obj.y + (obj.height * i) / steps;
-      const x = cx + (rand(i) - 0.5) * obj.width * 0.7;
+      const y = rect.y + (rect.height * i) / steps;
+      const x = cx + (rand(i) - 0.5) * rect.width * 0.7;
       ctx.lineTo(x, y);
     }
     ctx.stroke();
@@ -1451,8 +1618,12 @@ export class Game {
    */
   private drawSentenceBanner(ctx: CanvasRenderingContext2D): void {
     // La phrase-loi (D11) est spécifique à La Marge — sans ce garde-fou, elle
-    // restait affichée après une porte vers chapitre_01 (retour playtest 07-22).
-    if (this.room.id !== DEFAULT_ROOM_ID) return;
+    // restait affichée après une porte vers chapitre_01 (retour playtest
+    // 07-22). Comparaison à 'marge_01' en dur (pas DEFAULT_ROOM_ID, qui n'est
+    // qu'une commodité de chargement sans lien avec cette règle narrative —
+    // bug découvert en playtest visuel 2026-07-26 en changeant temporairement
+    // DEFAULT_ROOM_ID pour capturer chapitre_01).
+    if (this.room.id !== 'marge_01') return;
     const text = resolveSentence(this.sentenceVariants, this.storyFlags);
     if (text === '') return;
     const rewritten =
@@ -1599,8 +1770,13 @@ export class Game {
       this.renderInteractHint(ctx, inkwell);
     }
 
-    // Portes entre salles : dalle pleine + baie en dégradé "non-écrit".
+    // Portes entre salles : dalle pleine + baie en dégradé "non-écrit". Une
+    // porte verrouillée (`requiresFlag` non satisfait, retour de playtest
+    // 2026-07-26) reste sépia pleine au lieu de la baie accueillante : elle
+    // se distingue visuellement d'une porte franchissable.
     for (const door of this.room.objectsOfType('door')) {
+      const requiresFlag = door.properties['requiresFlag'];
+      const locked = typeof requiresFlag === 'string' && this.storyFlags[requiresFlag] !== true;
       ctx.shadowColor = RENDERING.shadowColor;
       ctx.shadowBlur = RENDERING.shadowBlur;
       ctx.fillStyle = PALETTE.sepia;
@@ -1608,10 +1784,14 @@ export class Game {
       ctx.roundRect(door.x - 2, door.y, door.width + 4, door.height, [8, 8, 0, 0]);
       ctx.fill();
       ctx.shadowBlur = 0;
-      const doorway = ctx.createLinearGradient(door.x, door.y, door.x, door.y + door.height);
-      doorway.addColorStop(0, hexAlpha(PALETTE.unwritten, 0.75));
-      doorway.addColorStop(1, hexAlpha(PALETTE.unwritten, 0.35));
-      ctx.fillStyle = doorway;
+      if (locked) {
+        ctx.fillStyle = hexAlpha(PALETTE.ink, 0.55);
+      } else {
+        const doorway = ctx.createLinearGradient(door.x, door.y, door.x, door.y + door.height);
+        doorway.addColorStop(0, hexAlpha(PALETTE.unwritten, 0.75));
+        doorway.addColorStop(1, hexAlpha(PALETTE.unwritten, 0.35));
+        ctx.fillStyle = doorway;
+      }
       ctx.beginPath();
       ctx.roundRect(door.x + 1, door.y + 3, door.width - 2, door.height - 3, [6, 6, 0, 0]);
       ctx.fill();
@@ -1778,6 +1958,7 @@ export class Game {
     const cx = boss.body.x + boss.body.w / 2;
     const cy = boss.body.y + boss.body.h / 2;
 
+    const flavor = resolveBossFlavor(this.bossFlavorVariants, this.storyFlags);
     const haloColor = boss.phase === 'vulnerable' ? PALETTE.unwritten : boss.phase === 'telegraph' ? PALETTE.danger : null;
     if (haloColor !== null) {
       const pulse = 0.5 + 0.5 * Math.sin(this.time * 8);
@@ -1801,7 +1982,7 @@ export class Game {
     ctx.font = 'italic bold 14px Georgia, serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('C', 0, 0);
+    ctx.fillText(flavor.label, 0, 0);
     ctx.textBaseline = 'alphabetic';
     ctx.restore();
 

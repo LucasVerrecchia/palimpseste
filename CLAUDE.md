@@ -236,9 +236,109 @@ danger #C1362B, non-écrit #CFE3E8.
     en parallaxe.
   - 148 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
     (screenshot Chromium headless).
+- **Dixième round (2026-07-26) — clarté des deux voies, reskin du mi-boss,
+  arène verticale (D16)** : Lucas rejoue et remonte que les deux chemins de
+  la déviation (RATURE/POINT FINAL) ne sont pas clairs. En creusant la
+  géométrie de `marge_01`, le vrai problème apparaît : le blanc ▢ (POINT
+  FINAL) est sur une passerelle optionnelle qu'on peut ignorer, et « jamais »
+  (RATURE) — seul vrai passage obligé — peut être contourné en s'y traçant
+  des plateformes d'encre par-dessus sans jamais l'effacer. Un joueur pouvait
+  finir avec RATURE seul, POINT FINAL seul, aucun des deux, ou (en théorie)
+  les deux. Décidé avec Lucas : s'engager dans une voie ferme désormais
+  l'autre (le 3ᵉ cas "aucun des deux" reste volontairement possible — fin
+  bonus PALIMPSESTE).
+  - `data/abilities.json` : mot ÉCRIRE → **PLUME** (un seul champ, propage
+    partout : HUD, menu pause, toast de ramassage). `pnj_marge.json` :
+    reformulation de la réplique qui épelait encore "le mot ÉCRIRE".
+  - Toasts de `tryRatureCanon`/`checkBlanks` (game.ts) : rendent explicite
+    "tu choisis de continuer l'histoire" (POINT FINAL) / "tu choisis de
+    rester en dehors de l'histoire" (RATURE) — seulement pour les déviations
+    qui pèsent réellement (leaning défini), pas pour « enfermé » (neutre).
+    Texte `[proposition]`.
+  - `narrative/deviation.ts` : nouvelle `isDeviationLocked(exclusiveWith,
+    flags)`, testée. `gen_room_marge01.mjs` : `mot_jamais`/`blanc_nom`
+    gagnent une propriété `exclusiveWith` réciproque. Câblé dans
+    `tryRatureCanon`/`checkBlanks` : une fois l'autre voie engagée, tenter
+    l'autre déviation échoue avec un toast dédié plutôt que de s'appliquer
+    silencieusement.
+  - **Reskin du mi-boss** (même mécanique, mêmes stats — seule la peau
+    change) : rature_jamais → on reste dans le méta, on combat **La Marge**
+    ; sinon (POINT FINAL ou indécis, "jeu du récit") → un monstre de conte
+    inventé, **le Troll d'Encre** (`[proposition]`, à valider/renommer).
+    Nouveau `narrative/boss_flavor.ts` (`resolveBossFlavor`, même principe
+    que `resolveSentence`) + `data/chapters/chapitre_01.json`
+    (`bossFlavorVariants`). Branché aux 4 points qui étaient en dur : toast
+    de défaite, lettre au canvas, décor d'arrière-plan de l'arène
+    (`renderHandQuillDecor`/nouveau `renderCreatureDecor`), testé.
+  - **Restructuration de chapitre_01** : AILES retiré (le gouffre et
+    `mot_ales` disparaissent — le double-saut migre au niveau 3, hors
+    scope). Salle doublée en hauteur (H 17→34, D16) pour une arène de
+    mi-boss verticale — la caméra (`engine/camera.ts`) suivait déjà l'axe Y
+    génériquement, jamais exercé faute de salle assez haute : aucun
+    changement moteur. Nouveau mur BRÈCHE cassable **uniquement en
+    hauteur** (seule la bande du haut, 17 rangées, est enregistrée comme
+    `breche_wall` ; le bas reste un mur `ground` permanent) — il faut se
+    tracer un escalier d'encre dans un puits pour l'atteindre. Second
+    encrier ajouté avant ce puits.
+  - 157 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    (screenshots Chromium headless) ; playtest interactif complet (grimper
+    l'escalier d'encre, casser le mur en hauteur, voir le défilement
+    vertical, affronter le boss reskinné) laissé à Lucas — pas
+    scriptable sans pilote dédié pour le tracé à la souris.
+- **Onzième round (2026-07-26) — playtest du dixième round, bugs corrigés** :
+  - **Bug de spawn corrigé** : la porte marge_01 → chapitre_01 ciblait encore
+    l'ancienne coordonnée (`targetY: 202`) d'avant le doublement de hauteur
+    (D16, OFFSET=17) — le joueur atterrissait au-dessus du plafond du
+    corridor, dans le vide nouvellement ajouté, au lieu du corridor
+    lui-même. C'est ce que Lucas décrivait comme « on apparaît en haut du
+    niveau ». `targetY` corrigé (474 = 202 + OFFSET×16).
+  - **2 murs BRÈCHE « points faibles » ajoutés dans l'arène**, avec un
+    premier essai de mécanique corrigé après un aller-retour sur la
+    formulation exacte de Lucas (« t'as toujours pas compris ») clarifié par
+    deux questions à choix : (1) le premier mur BRÈCHE (celui du puits)
+    redevient un mur **simple** — entièrement cassable depuis le sol, `y`/
+    `height` couvrent toute la salle, aucune grimpe obligatoire pour lui,
+    fissure sur toute sa longueur comme avant le rehaussement de la salle ;
+    (2) les murs de l'arène restent chacun **un seul objet BRÈCHE plein**
+    (même mécanique tout-ou-rien que partout ailleurs, `room.ts` inchangé)
+    mais leur fissure DESSINÉE est restreinte à une bande étroite en hauteur
+    (`crackY`/`crackHeight`, propriétés Tiled lues par le nouveau
+    `crackRectOf` dans `game.ts` — ne changent QUE le rendu, pas la
+    mécanique) : il faut grimper jusqu'à cette bande pour voir/atteindre la
+    fissure, mais casser n'importe quelle tuile de cet objet ouvre TOUT le
+    mur d'un coup. Salle élargie 74→84 tuiles pour caser les deux murs avec
+    une marge de sécurité après les zones de patrouille des ennemis communs
+    (un mur en plein milieu d'une zone de patrouille aurait pu bloquer un
+    ennemi contre lui indéfiniment) ; boss/fiole/porte décalés d'autant.
+    Répond aussi au "quelque chose d'intéressant en haut, sinon on
+    l'enlève" : le second mur a sa fissure près du plafond réel de la
+    salle, ce qui donne un objectif au sommet de l'arène plutôt qu'un vide.
+  - **Porte vers ratures_01 verrouillée tant que le mi-boss n'est pas
+    vaincu** (nouveau champ Tiled `requiresFlag`, vérifié dans
+    `checkDoors()` contre `storyFlags` — le flag `boss_coquille_majuscule_vaincu`
+    existait déjà). Porte rendue visuellement différente (sépia pleine, pas
+    la baie accueillante) tant qu'elle est verrouillée.
+  - **Repère de voie persistant** (retour : « j'ai pas trop compris dans
+    quel axe j'étais ») : nouvelle fonction pure `resolveLeaning` (lit
+    `rature_jamais`/`nom_ecrit`), affichée dans le menu pause (Échap) —
+    contrairement au toast, consultable à tout moment. Texte
+    `[proposition]`.
+  - **Bug latent trouvé pendant la vérification visuelle** (pas dans les
+    retours de Lucas, découvert en testant) : le bandeau de la phrase-loi
+    réapparaissait dans chapitre_01. La garde comparait `this.room.id` à
+    `DEFAULT_ROOM_ID` (une commodité de chargement) au lieu de `'marge_01'`
+    en dur — un changement de salle par défaut suffisait à casser la règle
+    narrative. Corrigé.
+  - 163 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    (Chromium headless, y compris avec un point de spawn temporaire pour
+    voir le mur simple et la fissure étroite des murs de l'arène) ; grimper
+    réellement l'escalier d'encre jusqu'aux points faibles et affronter le
+    boss restent à playtester par Lucas (tracé à la souris non scriptable).
 - Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond +
-  zone 3 (PNJ adaptatif) terminées et playtestées. **Manquant pour la
+  zone 3 (PNJ adaptatif) + clarté des 2 voies + reskin du mi-boss + bugs de
+  playtest du dixième round terminées et corrigées. **Manquant pour la
   conformité au brief** : zones 4-6 (spec en prévoit 5 + climax, 3 salles
-  construites), `endings.ts`/`resolveEnding` + salle climax "La Page
-  Blanche" + pouvoir POINT (2 fins obligatoires — `endingLeaning` déjà
-  nourri par les mots-loi et, depuis ce round, par le dialogue).
+  construites — le niveau 3 "collecte" à deux variantes est à sa propre
+  session de planification, cf. prompts_logs), `endings.ts`/`resolveEnding`
+  + salle climax "La Page Blanche" + pouvoir POINT (2 fins obligatoires —
+  `endingLeaning` déjà nourri par les mots-loi et le dialogue).
