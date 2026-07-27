@@ -334,11 +334,183 @@ danger #C1362B, non-écrit #CFE3E8.
     voir le mur simple et la fissure étroite des murs de l'arène) ; grimper
     réellement l'escalier d'encre jusqu'aux points faibles et affronter le
     boss restent à playtester par Lucas (tracé à la souris non scriptable).
+- **Douzième round (2026-07-26) — finalisation du niveau 3 « Les Ratures »**
+  (session de planification dédiée, cf. session 17 où l'idée avait été mise
+  de côté ; mode plan avec 3 agents Explore en parallèle sur la spec, les
+  prompts_logs et l'état du code, puis question structurée à Lucas pour
+  fixer le sens exact de « deux variantes » / « composition de phrase »).
+  - **Bug confirmé et corrigé** : AILES (double saut) avait été retiré de
+    `chapitre_01` en D16 avec la note « migre au niveau 3 », mais cette
+    migration n'avait jamais été faite — aucun objet de ramassage AILES
+    n'existait plus nulle part. `ratures_01` était donc infranchissable
+    au-delà de son gouffre (portée du dash HÂTE ≈42px, gouffre 64px).
+    Mot-pouvoir AILES ajouté dans `ratures_01`, juste avant le gouffre.
+  - Salle élargie 42→64 tuiles : après le gouffre, 2 ennemis communs
+    (Coquille, Rature — thème spec « cimetière de persos coupés »), puis le
+    PNJ (repositionné), puis **3 fragments** à hauteur croissante (sol, saut
+    simple, double saut AILES — `fragment_ratures_1/2/3`).
+  - Décisions validées avec Lucas : les « deux variantes » suivent le
+    penchant RATURE/POINT FINAL déjà choisi en `marge_01` (pas un nouveau
+    choix indépendant) ; composer la phrase (3 fragments ramassés) **débloque
+    la suite** — devient une vraie condition de progression, pas un
+    événement passif.
+  - Nouveau `narrative/fragments.ts` (`allFragmentsCollected`, fonction pure
+    testée) : calcule le flag dérivé `ratures_phrase_composee` dans
+    `checkPickups` (game.ts) une fois les 3 fragments ramassés, affiche la
+    phrase (`resolveSentence`, variantes selon le penchant dans le nouveau
+    `data/chapters/ratures_01.json`, textes `[TODO narration]`) en toast.
+  - Porte-palier (`porte_zone4`, `requiresFlag:'ratures_phrase_composee'`)
+    bouclant sur une alcôve de la même salle (pas de zone 4 à construire
+    dans cette session — juste un point d'accroche propre). Nouvelle
+    propriété Tiled `lockedMessage` sur les portes verrouillées : le message
+    de porte close était codé en dur sur « il faut vaincre le mi-boss »,
+    faux pour cette 2ᵉ porte `requiresFlag` — généralisé avec repli sur
+    l'ancien texte.
+  - Bug latent corrigé au passage : `replayRoomState`/`wireToasts` (game.ts)
+    étaient codés en dur sur `fragment_marge` (un seul fragment supposé par
+    salle) — généralisés en boucle sur `objectsOfType('fragment')`,
+    nécessaire pour les 3 fragments de `ratures_01` mais corrige aussi un
+    bug inoffensif jusqu'ici sur `marge_01`.
+  - Le toast de fin de contenu actuel (zones 4-6 à venir) ne se déclenche
+    plus automatiquement à la première entrée dans la salle : il récompense
+    désormais le franchissement du palier (`finalizeRatures01Content`).
+  - 172 tests (+9), `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    et interactivement (Chromium headless piloté au clavier, Playwright
+    installé temporairement en local `--no-save` puis désinstallé,
+    `package.json`/`package-lock.json` vérifiés inchangés) : mot AILES
+    récupéré, gouffre franchi en sautant tôt + double saut + plané, 2
+    ennemis rencontrés (dégâts au contact confirmés), fragments ramassés
+    (toast générique), porte-palier verrouillée avec le bon message tant
+    que les 3 fragments ne sont pas réunis. Collecter les 3 fragments
+    jusqu'au bout et voir la porte s'ouvrir reste à confirmer par Lucas
+    (le tracé/déplacement précis en jeu réel, pas scripté à la perfection).
+- **Treizième round (2026-07-26) — bug des murs BRÈCHE qui perçaient le sol** :
+  retour de Lucas sur `chapitre_01` : casser un mur BRÈCHE crée un trou dans
+  le sol à cet endroit, où les Ratures qui poursuivent le joueur (elles
+  ignorent leurs bornes de patrouille en chasse, `enemy.ts`) tombent et
+  restent bloquées.
+  - **Cause** : les 3 objets `breche_wall` de `chapitre_01` (`mur_breche` +
+    les 2 « points faibles » de l'arène) couvraient toute la hauteur de la
+    salle (`y:0, height:H*TILE`), floor inclus. `revealFiligrane` bascule
+    TOUTES les tuiles enregistrées d'un mur sur le calque filigrane (vide
+    dans cette salle) une fois cassé — les 3 rangées de sol sous le mur
+    perdaient donc aussi leur solidité.
+  - **Correctif** (`tools/gen_room_chapitre01.mjs`) : nouvelle constante
+    `WALL_HEIGHT = ROW(14) * TILE`, les 3 murs BRÈCHE s'arrêtent désormais
+    pile au-dessus du sol au lieu de l'englober. Le sol (bande séparée,
+    toujours solide) n'est plus jamais enregistré comme BRÈCHE, donc jamais
+    affecté par `revealFiligrane`, quel que soit l'état des murs.
+  - Nouveau test de régression (`tilemap.test.ts`) : construit une vraie
+    `Room` depuis les données réelles de `chapitre_01`, enregistre et révèle
+    chaque mur BRÈCHE comme le fait `game.ts`, et vérifie que les 3 rangées
+    de sol restent solides (`room.isSolid`) à la colonne de chaque mur.
+    Exercise le même chemin de code que le jeu réel — vérification plus
+    directe qu'une capture d'écran pour ce bug précis.
+  - 173 tests (+1), `tsc`/`eslint`/`vite build` verts.
+- **Quatorzième round (2026-07-26) — audit narratif complet** : Lucas demande
+  de se concentrer sur la narration, l'auditer, corriger ce qui ne fait pas
+  sens. Relecture de la spec §6, des deux dialogues, des phrases-loi, du
+  reskin du mi-boss et de tous les toasts narratifs, croisés avec les flags
+  réellement lus/écrits.
+  - **Bug de fond trouvé et corrigé** : aucun dialogue n'avait de garde
+    anti-répétition (contrairement aux objets ramassables) — reparler en
+    boucle à un PNJ réappliquait son `set_leaning` à l'infini, permettant de
+    forcer artificiellement n'importe quelle fin. `applyEffects` (game.ts)
+    ignore désormais les `set_leaning` d'un nœud déjà atteint (détecté via
+    son propre flag "rencontre", déjà posé dans le même lot d'effets).
+  - Le choix de Le Signet (pnj_marge, "Que préfères-tu ?") posait des flags
+    (`intention_rature`/`intention_point`) jamais lus par rien — corrigé en
+    ajoutant `set_leaning` (±0.5), symétrique au choix équivalent de La
+    Rature qui regrette.
+  - `flags.json` créé (`src/data/flags.json`) : manquait depuis la Phase 2
+    alors que la spec §4 l'exige explicitement (liste documentée des 15
+    flags d'histoire et leur effet sur `endingLeaning`).
+  - Mi-boss : nouveau `introToast` par variante (`boss_flavor.ts`,
+    `data/chapters/chapitre_01.json`), affiché à l'approche de l'arène — sans
+    lui, rien n'expliquait pourquoi CETTE créature précise (notamment « La
+    Marge », qui réapparaît dans une salle différente de la zone qu'elle
+    nomme) barre la route ici.
+  - **Deuxième retour de Lucas (playtest)**, trois points :
+    1. Confusion sur l'exclusivité RATURE/POINT FINAL — « au premier essai
+       je pense qu'on raturerait ET on remplirait le trou ». Le dialogue de
+       Le Signet disait « ou » sans dire que le premier choix ferme
+       définitivement l'autre — texte renforcé pour l'expliciter avant que
+       le joueur agisse.
+    2. « Le truc à ramasser, on sait même pas ce que c'est » (marge_01 ET
+       ratures_01) : les fragments ne montraient qu'un toast générique
+       ("Fragment de page recueilli."), aucun contenu. Chaque fragment porte
+       désormais son propre texte (`text`, nouvelle propriété Tiled), affiché
+       au ramassage (`checkPickups`). Le fragment de marge_01 plante la
+       prémisse du joueur ("le Dernier Mot", jamais nommée ailleurs en jeu,
+       spec §6) ; les 3 fragments de ratures_01 sont chacun la trace d'un
+       personnage coupé différent (thème "cimetière de persos coupés"). La
+       phrase composée de `ratures_01.json` (restée `[TODO narration]` vide
+       depuis le round précédent) est aussi rédigée : `[proposition]`.
+    3. « Le niveau après reste le même peu importe mon choix » : question
+       posée à Lucas (le seul reflet visible du choix dans chapitre_01 est
+       le skin du mi-boss, tout à la fin — ajouter un toast d'entrée, ou
+       rien pour l'instant vu que D13 est une décision déjà prise). Réponse
+       de Lucas : **rien pour l'instant**, chapitre_01 reste sans texte
+       narratif (D13 confirmée).
+  - **Bug de rendu trouvé en vérifiant visuellement** (pas dans les retours
+    de Lucas) : les toasts ne passaient jamais à la ligne (largeur non
+    bornée, texte centré) — un texte un peu long débordait des deux côtés de
+    l'écran, déjà visible sur des captures de la session précédente (toast
+    AILES coupé). `drawToasts` (hud.ts) découpe désormais le texte en lignes
+    (`wrapToastLines`, glouton mot par mot) et empile les toasts en tenant
+    compte de leur hauteur réelle (plus plusieurs lignes = plus haut),
+    au lieu d'un espacement fixe supposant une seule ligne.
+  - Deux points identifiés mais volontairement PAS tranchés seul (règle du
+    projet : narration décidée avec Lucas) : `chapitre_01` s'appelle « Le
+    Chapitre Premier » comme la spec (hub des PNJ, ville) mais c'est un pur
+    gauntlet mécanique sans PNJ — nom qui promet autre chose que ce qui
+    existe ; et « le Dernier Mot »/« la Première Plume » (prémisse spec §6)
+    restent quasi absents du texte en jeu au-delà du nouveau fragment de
+    marge_01.
+  - 173 tests, `tsc`/`eslint`/`vite build` verts. Vérifié visuellement
+    (Chromium headless, wrap des toasts confirmé sur un texte long réel).
+- **Quinzième round (2026-07-27) — mode narration (pause + machine à écrire)** :
+  nouveau retour de playtest : les moments qui comptent (fragment ramassé,
+  approche du mi-boss) restaient des toasts fugaces, pas assez marquants.
+  - Nouveau mode `'narration'` (`Mode` type, `game.ts`), calqué sur
+    `'dialogue'` : met la simulation en pause (comme un dialogue), affiche le
+    texte dans un panneau identique au style dialogue mais sans locuteur ni
+    choix (`drawNarrationBox`, `ui/dialogue_box.ts`), révélé progressivement
+    façon machine à écrire (`NARRATION_CHARS_PER_SECOND`, `config.ts`).
+    Premier appui pendant l'écriture affiche tout d'un coup (convention
+    standard) ; second appui ferme et rend la main. `wrapText` réutilisé tel
+    quel : redécouper seulement la portion déjà révélée retombe toujours sur
+    les mêmes retours à la ligne que le texte complet (glouton, ne regarde
+    jamais en avant), donc le texte ne saute pas pendant qu'il s'écrit.
+  - Convertis de `toast()` à `showNarration()` : ramassage de fragment (les 4),
+    phrase composée de `ratures_01`, intro et défaite du mi-boss, les deux
+    déviations (raturer/combler), fin de chapitre 1. Restent des toasts
+    légers (non bloquants, répétables) : pouvoirs ramassés, encrier, fiole,
+    respawn, portes verrouillées, indice de combat du mi-boss, fin de
+    contenu de `ratures_01` (message méta assumé, pas de la fiction).
+  - Nettoyé au passage : le toast de fin de chapitre 1 gardait une trace de
+    développement (« la suite arrive en Phase 2 ») qui n'a rien à faire dans
+    la fiction — retiré, texte réécrit en clôture pure.
+  - 173 tests (inchangé, `game.ts` non testé unitairement par convention du
+    projet), `tsc`/`eslint`/`vite build` verts. Vérifié interactivement en
+    Chromium headless : écriture progressive confirmée (capture mi-écriture
+    vs texte complet), pause réelle confirmée (tenir une touche de
+    déplacement pendant la narration ne bouge pas le joueur), fermeture et
+    reprise du jeu confirmées.
+  - **Retour non encore traité** : Lucas signale que le jeu "n'a pas vraiment
+    d'histoire" au-delà de la méta-abstraction (mots, marge, ratures) — porte
+    à concevoir une "histoire simple classique fantaisie" dont les phrases du
+    joueur changent le cours. Proposition en cours de discussion avec lui
+    avant toute réécriture de texte (règle du projet : narration décidée
+    avec Lucas).
 - Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond +
-  zone 3 (PNJ adaptatif) + clarté des 2 voies + reskin du mi-boss + bugs de
-  playtest du dixième round terminées et corrigées. **Manquant pour la
+  zone 3 (PNJ adaptatif, désormais finalisée) + clarté des 2 voies + reskin
+  du mi-boss + bugs de playtest terminées et corrigées. **Manquant pour la
   conformité au brief** : zones 4-6 (spec en prévoit 5 + climax, 3 salles
-  construites — le niveau 3 "collecte" à deux variantes est à sa propre
-  session de planification, cf. prompts_logs), `endings.ts`/`resolveEnding`
-  + salle climax "La Page Blanche" + pouvoir POINT (2 fins obligatoires —
-  `endingLeaning` déjà nourri par les mots-loi et le dialogue).
+  construites), `endings.ts`/`resolveEnding` + salle climax "La Page
+  Blanche" + pouvoir POINT (2 fins obligatoires — `endingLeaning` déjà
+  nourri par les mots-loi et le dialogue). Note : la spec dérive déjà de
+  l'implémentation réelle sur plusieurs points (ANCRE supprimé, BRÈCHE/HÂTE
+  enseignés en zone 2 au lieu des zones 3/5 prévues) — à clarifier avec
+  Lucas avant de construire ces zones plutôt que suivre la spec au pied de
+  la lettre.

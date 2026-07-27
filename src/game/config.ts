@@ -122,6 +122,9 @@ export const BOSS = {
   projectileLeadSeconds: 0.3,
 } as const;
 
+/** Distance (px) à laquelle le toast d'intro du mi-boss se déclenche (audit narratif 2026-07-26). */
+export const BOSS_INTRO_RANGE = 260;
+
 /**
  * Reprendre la sauvegarde au démarrage ? `false` pendant le développement :
  * relancer le jeu repart proprement du début du chapitre (au spawn), au lieu
@@ -142,6 +145,16 @@ export const TOAST_SECONDS = 3;
  * 2026-07-22 ("ça peut vite faire brouillon").
  */
 export const TOAST_STAGGER_SECONDS = 0.6;
+
+/**
+ * Moments narratifs importants (fragment trouvé, mi-boss, déviation, fin de
+ * chapitre) : retour de playtest 2026-07-27 — un toast qui s'efface tout
+ * seul ne laisse pas le temps de comprendre ce qui se passe. Ces moments
+ * mettent le jeu en pause (comme un dialogue) et affichent le texte comme
+ * s'il s'écrivait (cohérent avec le thème : le monde EST un manuscrit).
+ * Vitesse choisie pour rester lisible sans traîner ("pas trop lent").
+ */
+export const NARRATION_CHARS_PER_SECOND = 45;
 
 /** Direction artistique « manuscrit moderne » (décision D9, 2026-07-06). */
 export const RENDERING = {

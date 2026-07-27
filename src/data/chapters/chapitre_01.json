@@ -1,12 +1,13 @@
 {
   "id": "chapitre_01",
   "title": "Le Chapitre Premier",
-  "_comment": "[proposition narration — à valider avec Lucas]. Reskin du mi-boss selon le penchant choisi en marge_01 (même boss mécanique, résolveur pur resolveBossFlavor : la variante satisfaite la plus spécifique gagne). Le nom du monstre de conte (\"le Troll d'Encre\") est une proposition ouverte, tout comme dragon/troll/orc suggérés par Lucas — à confirmer ou renommer.",
+  "_comment": "[proposition narration — à valider avec Lucas]. Reskin du mi-boss selon le penchant choisi en marge_01 (même boss mécanique, résolveur pur resolveBossFlavor : la variante satisfaite la plus spécifique gagne). Le nom du monstre de conte (\"le Troll d'Encre\") est une proposition ouverte, tout comme dragon/troll/orc suggérés par Lucas — à confirmer ou renommer. Audit narratif 2026-07-26 : ajout de introToast (affiché à l'approche, avant le combat) — sans lui, rien n'expliquait pourquoi CETTE créature précise barre la route ici, notamment La Marge qui réapparaît dans une salle différente de la zone qu'elle nomme.",
   "bossFlavorVariants": [
     {
       "when": {},
       "name": "le Troll d'Encre",
       "label": "T",
+      "introToast": "Le livre s'invente un obstacle à ta mesure : une créature de conte se dresse sur ta route.",
       "defeatToast": "Le Troll d'Encre est vaincu.",
       "decor": "creature"
     },
@@ -14,6 +15,7 @@
       "when": { "rature_jamais": true },
       "name": "La Marge",
       "label": "M",
+      "introToast": "La Marge elle-même se dresse devant toi : ce que tu as raturé ne voulait pas rester effacé.",
       "defeatToast": "La Marge est corrigée.",
       "decor": "hand_quill"
     }

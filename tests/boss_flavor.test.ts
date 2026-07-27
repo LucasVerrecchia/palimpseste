@@ -3,8 +3,22 @@ import { DEFAULT_BOSS_FLAVOR, resolveBossFlavor, type BossFlavorVariant } from '
 
 describe('resolveBossFlavor — même boss, peau narrative selon le penchant', () => {
   const variants: BossFlavorVariant[] = [
-    { when: {}, name: 'le Troll d\'Encre', label: 'T', defeatToast: 'Le Troll d\'Encre est vaincu.', decor: 'creature' },
-    { when: { rature_jamais: true }, name: 'La Marge', label: 'M', defeatToast: 'La Marge est corrigée.', decor: 'hand_quill' },
+    {
+      when: {},
+      name: 'le Troll d\'Encre',
+      label: 'T',
+      introToast: 'Une créature de conte se dresse.',
+      defeatToast: 'Le Troll d\'Encre est vaincu.',
+      decor: 'creature',
+    },
+    {
+      when: { rature_jamais: true },
+      name: 'La Marge',
+      label: 'M',
+      introToast: 'La Marge elle-même se dresse.',
+      defeatToast: 'La Marge est corrigée.',
+      decor: 'hand_quill',
+    },
   ];
 
   it('sans variantes → repli sur DEFAULT_BOSS_FLAVOR', () => {
@@ -26,7 +40,14 @@ describe('resolveBossFlavor — même boss, peau narrative selon le penchant', (
   });
 
   it('un repli explicite remplace DEFAULT_BOSS_FLAVOR si fourni', () => {
-    const fallback: BossFlavorVariant = { when: {}, name: 'X', label: 'X', defeatToast: 'x', decor: 'creature' };
+    const fallback: BossFlavorVariant = {
+      when: {},
+      name: 'X',
+      label: 'X',
+      introToast: 'x',
+      defeatToast: 'x',
+      decor: 'creature',
+    };
     expect(resolveBossFlavor([], {}, fallback)).toBe(fallback);
   });
 });

@@ -26,6 +26,7 @@ import {
 import {
   AUTO_RESUME,
   BOSS,
+  BOSS_INTRO_RANGE,
   DRAW,
   ENEMY,
   hexAlpha,
@@ -33,6 +34,7 @@ import {
   INTERACT_MARGIN,
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
+  NARRATION_CHARS_PER_SECOND,
   PALETTE,
   PARTICLES,
   PHYSICS,
@@ -66,7 +68,7 @@ import { allAbilities, getAbility, hasAbility } from './player/abilities';
 import { stepPlayer, type PlayerState } from './player/controller';
 import { canAfford, createInk, reclaimInk, refillInk, spendInk, type InkState } from './player/ink';
 import { parseSave, SAVE_KEY, SAVE_VERSION, type SaveData } from './save';
-import { drawDialogueBox } from './ui/dialogue_box';
+import { drawDialogueBox, drawNarrationBox } from './ui/dialogue_box';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
 import { drawPauseMenu, PAUSE_MENU_OPTIONS, type PauseView } from './ui/pause_menu';
 import { renderBackdrop } from './world/backdrop';
@@ -82,6 +84,7 @@ import {
   type SentenceVariant,
 } from './narrative/deviation';
 import { resolveBossFlavor, type BossFlavorVariant } from './narrative/boss_flavor';
+import { allFragmentsCollected } from './narrative/fragments';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
 import dialoguePnjRatures from '../data/dialogues/pnj_ratures.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
@@ -89,6 +92,7 @@ import roomChapitre01 from '../data/rooms/chapitre_01.json';
 import roomRatures01 from '../data/rooms/ratures_01.json';
 import chapterMarge01 from '../data/chapters/marge_01.json';
 import chapterChapitre01 from '../data/chapters/chapitre_01.json';
+import chapterRatures01 from '../data/chapters/ratures_01.json';
 
 /**
  * Registre des salles chargeables (Phase 2, D13) : au lieu d'une seule salle
@@ -140,10 +144,11 @@ function parseBossFlavorVariants(raw: readonly unknown[]): BossFlavorVariant[] {
   for (const entry of raw) {
     if (typeof entry !== 'object' || entry === null) continue;
     const obj = entry as Record<string, unknown>;
-    const { name, label, defeatToast, decor } = obj;
+    const { name, label, introToast, defeatToast, decor } = obj;
     if (
       typeof name !== 'string' ||
       typeof label !== 'string' ||
+      typeof introToast !== 'string' ||
       typeof defeatToast !== 'string' ||
       (decor !== 'hand_quill' && decor !== 'creature')
     ) {
@@ -156,12 +161,18 @@ function parseBossFlavorVariants(raw: readonly unknown[]): BossFlavorVariant[] {
         if (typeof value === 'boolean') when[flag] = value;
       }
     }
-    variants.push({ when, name, label, defeatToast, decor });
+    variants.push({ when, name, label, introToast, defeatToast, decor });
   }
   return variants;
 }
 
-type Mode = 'playing' | 'dialogue' | 'paused';
+type Mode = 'playing' | 'dialogue' | 'narration' | 'paused';
+
+interface NarrationState {
+  text: string;
+  /** Secondes écoulées depuis le début de l'écriture (× NARRATION_CHARS_PER_SECOND = caractères révélés). */
+  elapsedSeconds: number;
+}
 
 interface ActiveDialogue {
   data: DialogueData;
@@ -219,6 +230,8 @@ export class Game {
    */
   private readonly sentenceVariants = parseSentenceVariants(chapterMarge01.sentenceVariants);
   private readonly bossFlavorVariants = parseBossFlavorVariants(chapterChapitre01.bossFlavorVariants);
+  /** Phrase composée des fragments de ratures_01, même résolveur pur que sentenceVariants. */
+  private readonly ratures01SentenceVariants = parseSentenceVariants(chapterRatures01.sentenceVariants);
 
   private player!: PlayerState;
   private enemies: Enemy[] = [];
@@ -226,6 +239,8 @@ export class Game {
   private bossContactCooldown = 0;
   private prevBossPhase: string | null = null;
   private bossHintShown = false;
+  /** Audit narratif 2026-07-26 : présente la peau du mi-boss à l'approche (voir introToast). */
+  private bossIntroShown = false;
   private ink!: InkState;
   private readonly unlocked = new Set<string>();
   private readonly storyFlags: Record<string, boolean | number> = {};
@@ -239,6 +254,7 @@ export class Game {
   private pauseView: PauseView = 'menu';
   private pauseSelected = 0;
   private dialogue: ActiveDialogue | null = null;
+  private narration: NarrationState | null = null;
   private readonly toasts: Toast[] = [];
   /** File d'attente des messages pas encore affichés (anti-spam, voir `toast`). */
   private readonly toastQueue: string[] = [];
@@ -356,9 +372,6 @@ export class Game {
       1,
     );
 
-    if (roomId === 'ratures_01' && !this.visitedRooms.has(roomId)) {
-      this.toast('Fin du contenu actuel : les zones 4 à 6 arriveront dans une prochaine passe.');
-    }
     this.visitedRooms.add(roomId);
     this.bus.emit('room_entered', { roomId });
     this.replayRoomState();
@@ -373,9 +386,11 @@ export class Game {
    * `restoreFromSave` une fois les flags de la sauvegarde appliqués.
    */
   private replayRoomState(): void {
-    if (this.storyFlags['fragment_marge'] === true) {
-      const fragment = this.room.firstObjectOfType('fragment');
-      if (fragment !== null) this.collectedObjects.add(fragment.id);
+    for (const fragment of this.room.objectsOfType('fragment')) {
+      const flag = fragment.properties['flag'];
+      if (typeof flag === 'string' && this.storyFlags[flag] === true) {
+        this.collectedObjects.add(fragment.id);
+      }
     }
     for (const word of this.room.objectsOfType('word')) {
       const ability = word.properties['ability'];
@@ -482,9 +497,9 @@ export class Game {
     this.bus.on('game_saved', () => {
       this.toast('Encrier : encre pleine, place retenue (R pour y revenir).');
     });
-    this.bus.on('flag_set', ({ flag }) => {
-      if (flag === 'fragment_marge') this.toast('Fragment de page recueilli.');
-    });
+    // Le toast de ramassage d'un fragment (avec son texte) est désormais
+    // affiché en direct par checkPickups — il connaît le fragment précis,
+    // contrairement à ce listener générique qui ne voit que le flag.
     this.bus.on('player_respawned', () => {
       this.toast('Le manuscrit te ramène à l\'encrier.');
     });
@@ -527,7 +542,7 @@ export class Game {
   // ---------- Update ----------
 
   update(dtSeconds: number): void {
-    if (this.input.wasPressed('pause') && this.mode !== 'dialogue') {
+    if (this.input.wasPressed('pause') && this.mode !== 'dialogue' && this.mode !== 'narration') {
       this.mode = this.mode === 'paused' ? 'playing' : 'paused';
       this.pauseView = 'menu';
       this.pauseSelected = 0;
@@ -542,6 +557,8 @@ export class Game {
     this.toastCooldown = Math.max(0, this.toastCooldown - dtSeconds);
     if (this.mode === 'dialogue') {
       this.updateDialogue();
+    } else if (this.mode === 'narration') {
+      this.updateNarration(dtSeconds);
     } else {
       this.updatePlaying(dtSeconds);
     }
@@ -704,6 +721,20 @@ export class Game {
     if (this.boss === null) return;
     this.bossContactCooldown = Math.max(0, this.bossContactCooldown - dtSeconds);
 
+    // Toast d'intro à l'approche (audit narratif 2026-07-26) : nomme la
+    // créature avant le contact, pour que son identité (La Marge / le Troll
+    // d'Encre) ait un sens au moment où elle apparaît, plutôt qu'après coup
+    // au seul toast de victoire.
+    if (!this.bossIntroShown && this.boss.phase !== 'defeated') {
+      const dxToBoss = Math.abs(this.player.body.x - this.boss.body.x);
+      if (dxToBoss < BOSS_INTRO_RANGE) {
+        this.bossIntroShown = true;
+        // Retour de playtest 2026-07-27 : un toast fugace ne suffisait pas à
+        // faire comprendre pourquoi CETTE créature est là — mis en pause.
+        this.showNarration(resolveBossFlavor(this.bossFlavorVariants, this.storyFlags).introToast);
+      }
+    }
+
     const dashActive = this.player.dashTimer > 0;
 
     let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds, this.player.body, {
@@ -717,7 +748,7 @@ export class Game {
       this.bus.emit('flag_set', { flag: 'boss_coquille_majuscule_vaincu', value: true });
       this.bus.emit('boss_defeated', { bossId: 'coquille_majuscule' });
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 24, PALETTE.danger, 80);
-      this.toast(resolveBossFlavor(this.bossFlavorVariants, this.storyFlags).defeatToast);
+      this.showNarration(resolveBossFlavor(this.bossFlavorVariants, this.storyFlags).defeatToast);
     } else if (boss.phase !== this.prevBossPhase && boss.phase === 'vulnerable') {
       this.burst(boss.body.x + boss.body.w / 2, boss.body.y + boss.body.h / 2, 6, PALETTE.unwritten, 40);
       if (!this.bossHintShown) {
@@ -792,12 +823,63 @@ export class Game {
     this.mode = 'playing';
   }
 
+  /**
+   * Met le jeu en pause sur un texte narratif qui s'écrit progressivement
+   * (retour de playtest 2026-07-27) : les moments qui comptent (fragment
+   * trouvé, mi-boss, déviation, fin de chapitre) avaient un simple toast
+   * éphémère, trop vite effacé pour être lu ou compris. Même mécanique de
+   * pause que le dialogue, sans locuteur ni choix — `drawNarrationBox`.
+   * N'écrase pas une narration déjà en cours (le premier texte va au bout).
+   */
+  private showNarration(text: string): void {
+    if (this.mode === 'narration') return;
+    this.narration = { text, elapsedSeconds: 0 };
+    this.mode = 'narration';
+  }
+
+  private updateNarration(dtSeconds: number): void {
+    const active = this.narration;
+    if (active === null) {
+      this.mode = 'playing';
+      return;
+    }
+    active.elapsedSeconds += dtSeconds;
+    const revealed = Math.floor(active.elapsedSeconds * NARRATION_CHARS_PER_SECOND);
+    if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
+      if (revealed < active.text.length) {
+        // Premier appui pendant l'écriture : affiche tout d'un coup plutôt
+        // que de forcer à attendre (convention standard des boîtes de texte).
+        active.elapsedSeconds = active.text.length / NARRATION_CHARS_PER_SECOND;
+      } else {
+        this.narration = null;
+        this.mode = 'playing';
+      }
+    }
+  }
+
+  /**
+   * Bug d'audit narratif (2026-07-26) : rien n'empêchait de reparler à un PNJ
+   * pour rejouer le même nœud terminal et réappliquer son `set_leaning` à
+   * l'infini (les dialogues n'ont pas de garde "déjà vu", contrairement aux
+   * objets ramassables qui utilisent `collectedObjects`) — on pouvait donc
+   * forcer une fin en boucle sur un seul PNJ, ce qui vide de sens le système
+   * des 2 fins. Un nœud terminal pose toujours son propre flag "rencontre"
+   * (`pnj_marge_rencontre`/`pnj_ratures_rencontre`) dans le même lot d'effets
+   * que son `set_leaning` (`advanceDialogue` fusionne effets du choix + du
+   * nœud d'arrivée en un seul appel) : si ce flag est DÉJÀ vrai avant cet
+   * appel, on est en train de rejouer un nœud déjà atteint — les `set_flag`
+   * restent appliqués (idempotents, sans effet), mais les `set_leaning` sont
+   * ignorés cette fois-ci.
+   */
   private applyEffects(effects: readonly DialogueEffect[]): void {
+    const alreadySeen = effects.some(
+      (e) => e.type === 'set_flag' && e.value === true && this.storyFlags[e.flag] === true,
+    );
     for (const effect of effects) {
       if (effect.type === 'set_flag') {
         this.storyFlags[effect.flag] = effect.value;
         this.bus.emit('flag_set', { flag: effect.flag, value: effect.value });
-      } else {
+      } else if (!alreadySeen) {
         this.endingLeaning = applyLeaning(this.endingLeaning, effect.delta);
       }
     }
@@ -932,7 +1014,9 @@ export class Game {
     // 2026-07-26, symétrique au toast de checkBlanks).
     const stakes =
       typeof barrier.properties['leaning'] === 'number' ? " Tu choisis de rester en dehors de l'histoire." : '';
-    this.toast(`Tu ratures « ${typeof text === 'string' ? text : '???'} » : le mot n'a plus de prise sur toi.${stakes}`);
+    // Retour de playtest 2026-07-27 : un choix qui pèse sur la fin mérite
+    // mieux qu'un toast fugace — mis en pause, écrit progressivement.
+    this.showNarration(`Tu ratures « ${typeof text === 'string' ? text : '???'} » : le mot n'a plus de prise sur toi.${stakes}`);
   }
 
   /** Un blanc ▢ entièrement recouvert d'encre complète la phrase (déviation POINT FINAL). */
@@ -957,7 +1041,7 @@ export class Game {
       // [proposition] Même garde que tryRatureCanon : seulement si la
       // déviation pèse réellement sur la fin (leaning défini).
       const stakes = typeof blank.properties['leaning'] === 'number' ? ' Tu choisis de continuer l\'histoire.' : '';
-      this.toast(
+      this.showNarration(
         `Tu t'écris dans la phrase : le blanc devient « ${typeof reveal === 'string' ? reveal : 'toi'} ».${stakes}`,
       );
     }
@@ -1103,6 +1187,25 @@ export class Game {
       this.storyFlags[flag] = true;
       this.burst(fragment.x + fragment.width / 2, fragment.y + fragment.height / 2, 16, PALETTE.unwritten, 50);
       this.bus.emit('flag_set', { flag, value: true });
+      // Retour de Lucas (audit narratif) : un fragment sans texte affiché ne
+      // dit rien de ce qu'on vient de trouver ni pourquoi. Chaque fragment
+      // porte désormais sa propre ligne de lore (`text`, données de salle).
+      // Retour de playtest 2026-07-27 : un toast s'efface trop vite pour un
+      // texte de lore qu'on découvre — mis en pause, écrit progressivement
+      // (showNarration), comme un dialogue.
+      const text = fragment.properties['text'];
+      this.showNarration(typeof text === 'string' ? `Fragment retrouvé : ${text}` : 'Fragment de page recueilli.');
+    }
+    if (this.room.id === 'ratures_01' && this.storyFlags['ratures_phrase_composee'] !== true) {
+      const fragmentFlags = this.room
+        .objectsOfType('fragment')
+        .map((f) => f.properties['flag'])
+        .filter((f): f is string => typeof f === 'string');
+      if (allFragmentsCollected(fragmentFlags, this.storyFlags)) {
+        this.storyFlags['ratures_phrase_composee'] = true;
+        this.bus.emit('flag_set', { flag: 'ratures_phrase_composee', value: true });
+        this.showNarration(resolveSentence(this.ratures01SentenceVariants, this.storyFlags));
+      }
     }
     for (const potion of this.room.objectsOfType('potion')) {
       if (this.collectedObjects.has(potion.id) || !this.playerOverlaps(potion)) continue;
@@ -1159,11 +1262,28 @@ export class Game {
     const kind = this.storyFlags['rature_jamais'] === true ? 'rature' : 'point';
     this.storyFlags['chapitre1_fini'] = true;
     this.bus.emit('chapter_ended', { ending: kind });
+    // Retour de playtest 2026-07-27 : mis en pause (showNarration) comme les
+    // autres moments qui comptent ; texte nettoyé de la note de développement
+    // (« la suite arrive en Phase 2 ») qui n'a rien à faire dans la fiction.
     if (kind === 'rature') {
-      this.toast('Tu quittes la Marge en la raturant. Un vide s\'ouvre, la suite arrive en Phase 2.');
+      this.showNarration('Tu quittes la Marge en la raturant. Un vide s\'ouvre devant toi — la suite du livre attend encore d\'être trouvée.');
     } else {
-      this.toast('Tu quittes la Marge en t\'y écrivant. La phrase s\'achève, la suite arrive en Phase 2.');
+      this.showNarration('Tu quittes la Marge en t\'y écrivant. La phrase s\'achève, mais l\'histoire, elle, continue.');
     }
+  }
+
+  /**
+   * Marque le contenu actuel de ratures_01 comme achevé, une fois le palier
+   * de sortie franchi (lui-même gardé par `ratures_phrase_composee`, posé
+   * dans `checkPickups` quand les 3 fragments sont ramassés). Remplace
+   * l'ancien toast automatique de première entrée dans la salle : la fin de
+   * contenu devient une récompense de progression plutôt qu'un simple aléa
+   * de chargement.
+   */
+  private finalizeRatures01Content(): void {
+    if (this.storyFlags['ratures01_fini'] === true) return;
+    this.storyFlags['ratures01_fini'] = true;
+    this.toast('Fin du contenu actuel : les zones 4 à 6 arriveront dans une prochaine passe.');
   }
 
   /**
@@ -1182,12 +1302,21 @@ export class Game {
     const requiresFlag = door.properties['requiresFlag'];
     if (typeof requiresFlag === 'string' && this.storyFlags[requiresFlag] !== true) {
       if (this.toastCooldown <= 0) {
-        this.toast('La porte reste close : il faut d\'abord vaincre le mi-boss.'); // [proposition]
+        // `lockedMessage` (propriété Tiled optionnelle) permet à chaque porte
+        // verrouillée d'expliquer sa propre condition ; repli sur le message
+        // historique (seule porte requiresFlag jusqu'ici : le mi-boss).
+        const lockedMessage = door.properties['lockedMessage'];
+        this.toast(
+          typeof lockedMessage === 'string'
+            ? lockedMessage
+            : 'La porte reste close : il faut d\'abord vaincre le mi-boss.', // [proposition]
+        );
         this.toastCooldown = 1.4;
       }
       return;
     }
     if (door.properties['endsChapter'] === 'chapitre1') this.finalizeChapter1();
+    if (door.properties['showsCompletionToast'] === true) this.finalizeRatures01Content();
     const targetRoom = door.properties['targetRoom'];
     const targetX = door.properties['targetX'];
     const targetY = door.properties['targetY'];
@@ -1253,6 +1382,11 @@ export class Game {
     if (this.mode === 'dialogue' && this.dialogue !== null) {
       const node = currentNode(this.dialogue.data, this.dialogue.state);
       if (node !== null) drawDialogueBox(ctx, node, this.dialogue.selected);
+    }
+
+    if (this.mode === 'narration' && this.narration !== null) {
+      const revealed = Math.floor(this.narration.elapsedSeconds * NARRATION_CHARS_PER_SECOND);
+      drawNarrationBox(ctx, this.narration.text, revealed);
     }
 
     if (this.mode === 'paused') {

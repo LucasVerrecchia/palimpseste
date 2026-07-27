@@ -109,3 +109,54 @@ export function drawDialogueBox(
     ctx.fillText('E …', BOX.x + width - BOX.margin, y + height - 8);
   }
 }
+
+/**
+ * Boîte de narration : même panneau que le dialogue, mais sans locuteur ni
+ * choix — un texte qui s'écrit progressivement (retour de playtest
+ * 2026-07-27 : les toasts s'effaçaient trop vite pour les moments qui
+ * comptent). `revealedChars` vient de `game.ts` (temps écoulé × vitesse) ;
+ * on re-découpe seulement la portion déjà révélée en lignes, ce qui tombe
+ * TOUJOURS sur les mêmes retours à la ligne que le texte complet (un
+ * retour à la ligne glouton ne regarde jamais en avant), donc le texte ne
+ * "saute" pas d'une ligne à l'autre pendant qu'il s'écrit.
+ */
+export function drawNarrationBox(ctx: CanvasRenderingContext2D, text: string, revealedChars: number): void {
+  const width = INTERNAL_WIDTH - BOX.x * 2;
+  const maxTextWidth = width - BOX.margin * 2;
+
+  ctx.font = '11px Georgia, serif';
+  const fullLines = wrapText(ctx, text, maxTextWidth);
+  const revealedLines = wrapText(ctx, text.slice(0, revealedChars), maxTextWidth);
+  const fullyRevealed = revealedChars >= text.length;
+
+  const textH = fullLines.length * LINE_H;
+  const height = 16 + textH + 16;
+  const y = INTERNAL_HEIGHT - height - BOX.bottom;
+
+  ctx.shadowColor = RENDERING.shadowColor;
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = PALETTE.parchment;
+  ctx.beginPath();
+  ctx.roundRect(BOX.x, y, width, height, 9);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = hexAlpha(PALETTE.ink, 0.75);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(BOX.x + 0.75, y + 0.75, width - 1.5, height - 1.5, 9);
+  ctx.stroke();
+
+  ctx.fillStyle = PALETTE.ink;
+  ctx.font = '11px Georgia, serif';
+  ctx.textAlign = 'left';
+  revealedLines.forEach((line, i) => {
+    ctx.fillText(line, BOX.x + BOX.margin, y + 16 + i * LINE_H + 8);
+  });
+
+  ctx.fillStyle = hexAlpha(PALETTE.sepia, 0.8);
+  ctx.font = 'italic 10px Georgia, serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(fullyRevealed ? 'E …' : '…', BOX.x + width - BOX.margin, y + height - 8);
+}

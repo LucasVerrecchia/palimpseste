@@ -58,6 +58,17 @@ const Y = (v) => v + OFFSET * TILE; // translate une ancienne coordonnée y (px)
 // x où le couloir s'ouvre en puits d'escalade avant le mur BRÈCHE (x=38).
 const WELL_START = 34;
 
+// Hauteur des murs BRÈCHE (retour de playtest 2026-07-26) : s'arrête juste
+// au-dessus du sol (ROW(14)), sans jamais l'englober. Un mur BRÈCHE dont
+// l'objet couvrait toute la hauteur de la salle (0 à H-1, sol inclus)
+// effaçait aussi les tuiles de sol sous lui une fois cassé (`revealFiligrane`
+// bascule TOUTES ses tuiles enregistrées sur le filigrane, vide ici) : un
+// trou apparaissait dans le sol à cet endroit, où une Rature poursuivant le
+// joueur (elle ignore ses bornes de patrouille en chasse) pouvait tomber et
+// rester bloquée. Le sol (solid() plus bas) reste une bande séparée,
+// toujours solide, jamais enregistrée comme BRÈCHE.
+const WALL_HEIGHT = ROW(14) * TILE;
+
 const grid = Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
 const solid = (x0, y0, x1, y1) => {
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) grid[y][x] = 1;
@@ -159,7 +170,7 @@ const objects = [
   // BRÈCHE du jeu, volontairement lisible et cassable en entier pour
   // enseigner le principe avant les points faibles de l'arène.
   {
-    id: id(), name: 'mur_breche', type: 'breche_wall', x: 38 * TILE, y: 0, width: 16, height: H * TILE,
+    id: id(), name: 'mur_breche', type: 'breche_wall', x: 38 * TILE, y: 0, width: 16, height: WALL_HEIGHT,
     properties: [prop('flag', 'string', 'breche_chapitre1_ouverte')],
   },
 
@@ -175,16 +186,17 @@ const objects = [
 
   // Murs BRÈCHE « points faibles » (retour de playtest 2026-07-26, précisé
   // D16-bis) : chacun est UN SEUL mur BRÈCHE plein (`y`/`height` couvrent
-  // toute la salle, comme `mur_breche` ci-dessus) — casser n'importe quelle
-  // tuile ouvre TOUT le mur d'un coup, mécanique inchangée. Seule la fissure
-  // dessinée (`crackY`/`crackHeight`, lues par `crackRectOf`, game.ts) est
-  // restreinte à une bande étroite : il faut grimper jusque-là pour la voir
-  // et l'atteindre. Le premier (juste après les ennemis) est à hauteur
+  // toute la salle jusqu'au sol, comme `mur_breche` ci-dessus, jamais le sol
+  // lui-même — voir WALL_HEIGHT) — casser n'importe quelle tuile ouvre TOUT
+  // le mur d'un coup, mécanique inchangée. Seule la fissure dessinée
+  // (`crackY`/`crackHeight`, lues par `crackRectOf`, game.ts) est restreinte
+  // à une bande étroite : il faut grimper jusque-là pour la voir et
+  // l'atteindre. Le premier (juste après les ennemis) est à hauteur
   // modérée ; le second (juste avant le combat) est haut, près du plafond
   // réel de la salle, pour donner un objectif dramatique au sommet de
   // l'arène avant le mi-boss.
   {
-    id: id(), name: 'mur_breche_gauntlet_1', type: 'breche_wall', x: 56 * TILE, y: 0, width: 16, height: H * TILE,
+    id: id(), name: 'mur_breche_gauntlet_1', type: 'breche_wall', x: 56 * TILE, y: 0, width: 16, height: WALL_HEIGHT,
     properties: [
       prop('flag', 'string', 'breche_gauntlet1_ouverte'),
       prop('crackY', 'int', 18 * TILE),
@@ -192,7 +204,7 @@ const objects = [
     ],
   },
   {
-    id: id(), name: 'mur_breche_gauntlet_2', type: 'breche_wall', x: 61 * TILE, y: 0, width: 16, height: H * TILE,
+    id: id(), name: 'mur_breche_gauntlet_2', type: 'breche_wall', x: 61 * TILE, y: 0, width: 16, height: WALL_HEIGHT,
     properties: [
       prop('flag', 'string', 'breche_gauntlet2_ouverte'),
       prop('crackY', 'int', 5 * TILE),

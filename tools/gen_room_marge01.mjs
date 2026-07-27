@@ -87,9 +87,20 @@ const objects = [
   { id: id(), name: 'encrier_marge', type: 'inkwell', x: 28 * TILE, y: 200, width: 16, height: 24 },
 
   // Fragment de lore secret, haut dans la page (récompense de tracé vertical).
+  // Retour de Lucas (audit narratif 2026-07-26) : un fragment sans texte ne
+  // dit rien de ce qu'on trouve ni pourquoi — premier fragment du jeu, c'est
+  // aussi l'occasion de planter la prémisse (spec §6 : le joueur est "le
+  // Dernier Mot", jamais nommé nulle part ailleurs en jeu). [TODO narration]
   {
     id: id(), name: 'fragment_marge', type: 'fragment', x: 40 * TILE, y: 4 * TILE, width: 16, height: 16,
-    properties: [prop('flag', 'string', 'fragment_marge')],
+    properties: [
+      prop('flag', 'string', 'fragment_marge'),
+      prop(
+        'text',
+        'string',
+        "« Je suis le dernier mot que la Plume ait tracé avant de se taire. Je cherche la phrase qui m'achèverait. »",
+      ),
+    ],
   },
 
   // ── Le choix final : deux façons de dévier la fin de la phrase ──────────

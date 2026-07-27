@@ -1,0 +1,19 @@
+{
+  "id": "ratures_01",
+  "title": "Zone 3 : Les Ratures",
+  "_comment": "[proposition narration — à valider avec Lucas]. Phrase composée à partir des 3 fragments ramassés dans la salle, une fois tous trouvés (résolveur pur resolveSentence, même principe que marge_01/chapitre_01 : la variante satisfaite la plus spécifique gagne selon le penchant RATURE/POINT FINAL déjà choisi en marge_01). Affichée en toast au moment où le dernier fragment est ramassé, pas en bandeau permanent. Reprend le contraste des 3 fragments (personnages coupés, sans suite) pour donner un sens à ce que le joueur a fait de son propre choix.",
+  "sentenceVariants": [
+    {
+      "when": {},
+      "text": "Trois traces, trois oublis. Toi, tu n'as encore rien choisi : le cimetière attend une quatrième pierre, ou aucune."
+    },
+    {
+      "when": { "rature_jamais": true },
+      "text": "Trois traces, trois oublis. Toi aussi tu t'effaces, mais tu marches encore : ça, aucune d'elles n'a pu le faire."
+    },
+    {
+      "when": { "nom_ecrit": true },
+      "text": "Trois traces, trois oublis. Toi, tu vas jusqu'au bout de ta phrase : ce qu'aucune d'elles n'a eu le temps de faire."
+    }
+  ]
+}

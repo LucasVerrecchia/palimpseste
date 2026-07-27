@@ -1,7 +1,7 @@
 {
   "id": "pnj_marge",
   "start": "intro",
-  "_comment": "[proposition narration — à valider avec Lucas]. Le PNJ pose la règle du chapitre : la phrase gravée dit que tu ne sortiras JAMAIS ; à toi de la dévier (raturer 'jamais' OU compléter le blanc de ton nom).",
+  "_comment": "[proposition narration — à valider avec Lucas]. Le PNJ pose la règle du chapitre : la phrase gravée dit que tu ne sortiras JAMAIS ; à toi de la dévier (raturer 'jamais' OU compléter le blanc de ton nom). Audit narratif 2026-07-26 : les choix de ce noeud ne pesaient sur rien (flags intention_rature/intention_point poses mais jamais lus) alors que le PNJ-miroir de ratures_01 fait deja pencher endingLeaning pour un choix symetrique (set_leaning) ; ajoute ici pour coherence, memes deltas +-0.5 que pnj_ratures.json.",
   "nodes": {
     "intro": {
       "speaker": "Le Signet",
@@ -20,17 +20,23 @@
     },
     "choix": {
       "speaker": "Le Signet",
-      "text": "Deux façons de tromper la phrase, tout au bout : rature le mot « jamais »... ou comble le blanc resté après « Le mot », et écris-toi une sortie. Que préfères-tu ?",
+      "text": "Deux façons de tromper la phrase, tout au bout — mais une seule tiendra : rature le mot « jamais », OU comble le blanc resté après « Le mot » pour t'y écrire. La première que tu choisiras fermera l'autre pour de bon. Que préfères-tu ?",
       "choices": [
         {
           "text": "Raturer ce qui m'enferme.",
           "next": "fin_rature",
-          "effects": [{ "type": "set_flag", "flag": "intention_rature", "value": true }]
+          "effects": [
+            { "type": "set_flag", "flag": "intention_rature", "value": true },
+            { "type": "set_leaning", "delta": -0.5 }
+          ]
         },
         {
           "text": "Me compléter, m'achever.",
           "next": "fin_point",
-          "effects": [{ "type": "set_flag", "flag": "intention_point", "value": true }]
+          "effects": [
+            { "type": "set_flag", "flag": "intention_point", "value": true },
+            { "type": "set_leaning", "delta": 0.5 }
+          ]
         },
         {
           "text": "Je verrai bien.",

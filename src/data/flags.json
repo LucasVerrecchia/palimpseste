@@ -1,0 +1,100 @@
+{
+  "_comment": "Documentation des flags d'histoire (spec §4 : 'flags.json : liste documentée de tous les flags d'histoire et leur effet sur endingLeaning'). Fichier de référence, non parsé par le code — game.ts reste la source de vérité pour le comportement réel ; ce fichier doit être tenu à jour à chaque flag ajouté. Créé lors de l'audit narratif du 2026-07-26 (le fichier manquait depuis la Phase 2).",
+  "endingLeaning": {
+    "type": "number",
+    "range": "non borné, <0 penche vers RATURE, >0 penche vers POINT FINAL, 0 = indécis",
+    "consumedBy": "pas encore branché (narrative/endings.ts / resolveEnding restent à écrire) ; déjà affiché en debug via resolveLeaning (menu pause)."
+  },
+  "flags": [
+    {
+      "flag": "efface_enferme",
+      "setBy": "marge_01 : raturer le mot-cage « enfermé » (mot_enferme), premier geste du jeu",
+      "endingLeaningEffect": 0,
+      "notes": "Neutre par conception (apprentissage, pas un choix qui pèse). Fait varier le texte de la phrase-loi (resolveSentence, data/chapters/marge_01.json)."
+    },
+    {
+      "flag": "rature_jamais",
+      "setBy": "marge_01 : raturer le mot-loi « jamais » (mot_jamais)",
+      "endingLeaningEffect": -1,
+      "notes": "Verrouille mutuellement nom_ecrit (isDeviationLocked, exclusiveWith) : une fois ce flag posé, combler le blanc ▢ échoue avec un toast dédié. Détermine aussi le reskin du mi-boss (La Marge, resolveBossFlavor), la variante d'intro de La Rature qui regrette (pnj_ratures, startVariants) et le repère de voie du menu pause (resolveLeaning → 'rature')."
+    },
+    {
+      "flag": "nom_ecrit",
+      "setBy": "marge_01 : combler le blanc ▢ (blanc_nom) en le recouvrant d'encre",
+      "endingLeaningEffect": 1,
+      "notes": "Verrouille mutuellement rature_jamais (même mécanisme, symétrique). Détermine la variante par défaut du mi-boss (le Troll d'Encre), la variante d'intro de La Rature qui regrette, le repère de voie → 'point_final'."
+    },
+    {
+      "flag": "intention_rature",
+      "setBy": "marge_01 : réponse « Raturer ce qui m'enferme » au PNJ Le Signet (avant tout geste mécanique)",
+      "endingLeaningEffect": -0.5,
+      "notes": "Ajouté lors de l'audit narratif 2026-07-26 : ce flag existait depuis la Phase 2 mais n'était lu nulle part (choix purement décoratif) alors que le PNJ-miroir de ratures_01 fait déjà pencher endingLeaning pour un choix symétrique. N'affecte que endingLeaning, jamais le déblocage des chemins (seuls rature_jamais/nom_ecrit gatent la porte-palier et le reskin) : une simple intention déclarée peut donc diverger du geste réellement posé ensuite."
+    },
+    {
+      "flag": "intention_point",
+      "setBy": "marge_01 : réponse « Me compléter, m'achever » au PNJ Le Signet",
+      "endingLeaningEffect": 0.5,
+      "notes": "Symétrique à intention_rature."
+    },
+    {
+      "flag": "pnj_marge_rencontre",
+      "setBy": "marge_01 : n'importe quelle issue de la conversation avec Le Signet (fin_rature/fin_point/fin_doute)",
+      "endingLeaningEffect": 0,
+      "notes": "Sert de garde anti-répétition (game.ts, applyEffects) : reparler à Le Signet ne réapplique plus intention_rature/intention_point sur endingLeaning une fois ce flag posé — sans quoi le joueur pouvait forcer une fin en boucle sur un seul PNJ (bug corrigé 2026-07-26)."
+    },
+    {
+      "flag": "pnj_ratures_rencontre",
+      "setBy": "ratures_01 : n'importe quelle issue de la conversation avec La Rature qui regrette",
+      "endingLeaningEffect": 0,
+      "notes": "Même rôle de garde anti-répétition que pnj_marge_rencontre, pour les set_leaning ±0.5 de ce dialogue (rature_reaction/point_reaction/doute_choix, data/dialogues/pnj_ratures.json)."
+    },
+    {
+      "flag": "fragment_marge",
+      "setBy": "marge_01 : ramasser le fragment de lore",
+      "endingLeaningEffect": 0,
+      "notes": "Collectible optionnel, aucun effet narratif au-delà du toast de ramassage."
+    },
+    {
+      "flag": "fragment_ratures_1 / fragment_ratures_2 / fragment_ratures_3",
+      "setBy": "ratures_01 : ramasser chacun des 3 fragments de la salle",
+      "endingLeaningEffect": 0,
+      "notes": "Individuellement neutres. Réunis tous les 3, ils posent le flag dérivé ratures_phrase_composee (allFragmentsCollected, narrative/fragments.ts)."
+    },
+    {
+      "flag": "ratures_phrase_composee",
+      "setBy": "ratures_01 : dérivé, posé automatiquement quand les 3 fragments ci-dessus sont réunis (checkPickups, game.ts)",
+      "endingLeaningEffect": 0,
+      "notes": "Déverrouille la porte-palier (porte_zone4, requiresFlag) vers la suite du contenu. La phrase affichée à ce moment (resolveSentence, data/chapters/ratures_01.json) VARIE selon rature_jamais/nom_ecrit déjà posés, mais ce flag lui-même ne modifie pas endingLeaning — c'est une porte de progression, pas un choix."
+    },
+    {
+      "flag": "breche_chapitre1_ouverte / breche_gauntlet1_ouverte / breche_gauntlet2_ouverte",
+      "setBy": "chapitre_01 : casser chacun des 3 murs BRÈCHE de la salle",
+      "endingLeaningEffect": 0,
+      "notes": "Purement mécaniques (ouvrent un passage) ; aucun poids narratif."
+    },
+    {
+      "flag": "potion_chapitre1_pv",
+      "setBy": "chapitre_01 : boire la fiole d'encre rouge (usage unique)",
+      "endingLeaningEffect": 0,
+      "notes": "Purement mécanique (restaure des PV)."
+    },
+    {
+      "flag": "boss_coquille_majuscule_vaincu",
+      "setBy": "chapitre_01 : défaite du mi-boss",
+      "endingLeaningEffect": 0,
+      "notes": "Déverrouille la porte vers ratures_01. Le reskin du boss (déjà résolu via rature_jamais avant le combat) ne change pas rétroactivement en fonction de ce flag."
+    },
+    {
+      "flag": "chapitre1_fini",
+      "setBy": "marge_01 : franchir la porte de fin (endsChapter)",
+      "endingLeaningEffect": 0,
+      "notes": "Marque la fin du chapitre ; le toast affiché ('rature' vs 'point') est dérivé de rature_jamais déjà posé, pas de ce flag."
+    },
+    {
+      "flag": "ratures01_fini",
+      "setBy": "ratures_01 : franchir la porte-palier une fois ratures_phrase_composee vrai",
+      "endingLeaningEffect": 0,
+      "notes": "Marque la fin du contenu actuellement construit (zones 4-6 à venir)."
+    }
+  ]
+}

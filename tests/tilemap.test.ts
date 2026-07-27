@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { filigraneGidAt, gidAt, mergeSolidTiles, parseTiledMap } from '../src/engine/tilemap';
+import { Room } from '../src/game/world/room';
+import { objectTiles } from '../src/game/narrative/deviation';
 import marge01 from '../src/data/rooms/marge_01.json';
 import chapitre01 from '../src/data/rooms/chapitre_01.json';
 import ratures01 from '../src/data/rooms/ratures_01.json';
@@ -279,31 +281,38 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(wall?.properties['flag']).toBeTypeOf('string');
   });
 
-  it('le mur BRÈCHE est entièrement cassable, sol au plafond (mur simple, D16-bis : retour de playtest 2026-07-26, pas de grimpe obligatoire pour lui)', () => {
+  it('le mur BRÈCHE est entièrement cassable, sol au plafond mais SANS englober le sol (mur simple, D16-bis : retour de playtest 2026-07-26, pas de grimpe obligatoire pour lui)', () => {
     const wall = map.objects.find((o) => o.name === 'mur_breche');
     expect(wall).toBeDefined();
-    // L'objet BRÈCHE enregistré couvre TOUTE la hauteur de la salle (pas
+    // L'objet BRÈCHE enregistré couvre toute la hauteur du COULOIR (pas
     // seulement une bande) : premier mur BRÈCHE du jeu, cassable depuis le
-    // sol comme avant le rehaussement de la salle.
+    // sol comme avant le rehaussement de la salle. Il s'arrête PILE au-dessus
+    // du sol (3 dernières rangées, "sol continu") : bug corrigé le
+    // 2026-07-26 (retour de Lucas) — un mur qui engloberait aussi le sol
+    // ouvrirait un trou dedans une fois cassé, où une Rature en poursuite
+    // (elle ignore ses bornes de patrouille en chasse) pouvait tomber et
+    // rester bloquée. Le sol doit rester solide quel que soit l'état du mur.
+    const floorStartRow = map.heightTiles - 3;
     expect(wall?.y).toBe(0);
-    expect(wall?.height).toBe(map.heightTiles * 16);
+    expect(wall?.height).toBe(floorStartRow * 16);
     // Pas de crackY/crackHeight : la fissure (rendu, game.ts `crackRectOf`)
     // couvre donc tout le mur par défaut.
     expect(wall?.properties['crackY']).toBeUndefined();
   });
 
-  it('deux murs BRÈCHE "points faibles" dans l\'arène : mur plein entier, mais fissure (et donc l\'endroit à atteindre) restreinte en hauteur (retour de playtest 2026-07-26, précisé D16-bis)', () => {
+  it('deux murs BRÈCHE "points faibles" dans l\'arène : mur plein jusqu\'au sol (jamais le sol), fissure restreinte en hauteur (retour de playtest 2026-07-26, précisé D16-bis)', () => {
     const gauntletWalls = map.objects.filter((o) => o.type === 'breche_wall' && o.name !== 'mur_breche');
     expect(gauntletWalls).toHaveLength(2);
+    const floorStartRow = map.heightTiles - 3;
     for (const wall of gauntletWalls) {
       const col = Math.floor(wall.x / 16);
       // La colonne entière est solide dans "ground"...
       for (let ty = 0; ty < map.heightTiles; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
-      // ...et l'objet BRÈCHE lui-même couvre TOUTE la hauteur (casser
-      // n'importe où dans cet objet ouvre tout le mur d'un coup, même
-      // mécanique tout-ou-rien que le mur simple ci-dessus).
+      // ...et l'objet BRÈCHE lui-même couvre toute la hauteur jusqu'au sol,
+      // jamais le sol (casser n'importe où dans cet objet ouvre tout le mur
+      // d'un coup, même mécanique tout-ou-rien que le mur simple ci-dessus).
       expect(wall.y).toBe(0);
-      expect(wall.height).toBe(map.heightTiles * 16);
+      expect(wall.height).toBe(floorStartRow * 16);
       expect(typeof wall.properties['flag']).toBe('string');
       // Seule la fissure DESSINÉE est restreinte à une bande étroite : il
       // faut grimper jusque-là pour la voir/l'atteindre en premier.
@@ -314,6 +323,22 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     const crackYs = gauntletWalls.map((w) => w.properties['crackY'] as number).sort((a, b) => a - b);
     expect(crackYs[0]).toBeLessThan(10 * 16);
     expect(crackYs[1]).toBeGreaterThan(15 * 16);
+  });
+
+  it('casser n\'importe quel mur BRÈCHE ne perce jamais le sol (régression : une Rature en poursuite tombait dans le trou et restait bloquée)', () => {
+    const walls = map.objects.filter((o) => o.type === 'breche_wall');
+    expect(walls.length).toBeGreaterThan(0);
+    const room = new Room('chapitre_01', map);
+    for (const wall of walls) room.registerBrecheWall(wall.id, objectTiles(wall));
+    for (const wall of walls) {
+      room.revealFiligrane(wall.id);
+      const col = Math.floor(wall.x / 16);
+      // Les 3 rangées du sol restent solides à la colonne du mur, même une
+      // fois ce mur (et tous les précédents) révélé·s.
+      for (let ty = map.heightTiles - 3; ty < map.heightTiles; ty++) {
+        expect(room.isSolid(col, ty)).toBe(true);
+      }
+    }
   });
 
   it('contient les ennemis communs et le mi-boss, aucun PNJ ni phrase-loi', () => {
@@ -379,7 +404,7 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
   });
 });
 
-describe('salle ratures_01 — zone 3 « Les Ratures » (premier PNJ narratif au-delà de La Marge)', () => {
+describe('salle ratures_01 — zone 3 « Les Ratures » (finalisée : AILES, 3 fragments, ennemis, palier de sortie)', () => {
   const map = parseTiledMap(ratures01);
 
   it('a un contour fermé', () => {
@@ -390,13 +415,15 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (premier PNJ narratif au
     }
   });
 
-  it('contient un unique PNJ, un encrier, un fragment et une porte de retour ; aucun ennemi ni boss', () => {
+  it('contient un unique PNJ, un encrier, 3 fragments, 2 ennemis et 2 portes ; aucun boss ni canon', () => {
     const types = new Set(map.objects.map((o) => o.type));
-    for (const required of ['spawn', 'npc', 'inkwell', 'fragment', 'door']) {
+    for (const required of ['spawn', 'npc', 'inkwell', 'fragment', 'word', 'enemy', 'door']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
     expect(map.objects.filter((o) => o.type === 'npc')).toHaveLength(1);
-    expect(types.has('enemy')).toBe(false);
+    expect(map.objects.filter((o) => o.type === 'fragment')).toHaveLength(3);
+    expect(map.objects.filter((o) => o.type === 'enemy')).toHaveLength(2);
+    expect(map.objects.filter((o) => o.type === 'door')).toHaveLength(2);
     expect(types.has('boss')).toBe(false);
     expect(types.has('canon')).toBe(false);
   });
@@ -406,7 +433,42 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (premier PNJ narratif au
     expect(npc?.properties['dialogue']).toBe('pnj_ratures');
   });
 
-  it('un petit gouffre coupe le sol avant le PNJ (déjà franchissable, aucun pouvoir n\'y est enseigné)', () => {
+  it('les 3 fragments ont chacun un flag distinct et préfixé "fragment_"', () => {
+    const fragments = map.objects.filter((o) => o.type === 'fragment');
+    const flags = fragments.map((f) => f.properties['flag']);
+    expect(new Set(flags).size).toBe(3);
+    for (const flag of flags) {
+      expect(typeof flag).toBe('string');
+      expect((flag as string).startsWith('fragment_')).toBe(true);
+    }
+  });
+
+  it('contient exactement les 2 ennemis communs (Coquille, Rature), séparés par une marge de sécurité', () => {
+    const enemies = map.objects.filter((o) => o.type === 'enemy');
+    const kinds = enemies.map((o) => o.properties['kind']);
+    expect(new Set(kinds)).toEqual(new Set(['coquille', 'rature']));
+    const [a, b] = [...enemies].sort((x, y) => x.x - y.x);
+    // Aucun chevauchement/contact entre les deux zones de patrouille.
+    expect((b?.x ?? 0)).toBeGreaterThanOrEqual((a?.x ?? 0) + (a?.width ?? 0));
+  });
+
+  it('offre le mot-pouvoir AILES avant le gouffre qu\'il permet de franchir (D16 : migration jamais faite jusqu\'ici)', () => {
+    const words = map.objects.filter((o) => o.type === 'word');
+    expect(words).toHaveLength(1);
+    expect(words[0]?.properties['ability']).toBe('ales');
+
+    let gapStartCol = -1;
+    for (let tx = 1; tx < map.widthTiles - 1; tx++) {
+      if (gidAt(map, tx, 14) === 0 && gidAt(map, tx, 16) === 0) {
+        gapStartCol = tx;
+        break;
+      }
+    }
+    expect(gapStartCol).toBeGreaterThan(0);
+    expect(words[0]?.x ?? Infinity).toBeLessThan(gapStartCol * 16);
+  });
+
+  it('un petit gouffre coupe le sol avant les ennemis et le PNJ, seul moyen de le franchir : AILES', () => {
     const npc = map.objects.find((o) => o.type === 'npc');
     let gapWidth = 0;
     let gapEndsBeforeNpc = true;
@@ -421,9 +483,19 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (premier PNJ narratif au
   });
 
   it('la porte de retour vise chapitre_01 loin des deux portes concernées', () => {
-    const door = map.objects.find((o) => o.type === 'door');
-    expect(door?.properties['targetRoom']).toBe('chapitre_01');
+    const door = map.objects.find((o) => o.type === 'door' && o.properties['targetRoom'] === 'chapitre_01');
+    expect(door).toBeDefined();
     const targetX = door?.properties['targetX'];
     expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
+  });
+
+  it('la porte-palier est verrouillée par la phrase composée (les 3 fragments) et boucle sur la même salle', () => {
+    const door = map.objects.find((o) => o.type === 'door' && o.properties['requiresFlag'] === 'ratures_phrase_composee');
+    expect(door).toBeDefined();
+    expect(door?.properties['targetRoom']).toBe('ratures_01');
+    expect(door?.properties['showsCompletionToast']).toBe(true);
+    // Placée après tous les fragments, pas avant.
+    const fragments = map.objects.filter((o) => o.type === 'fragment');
+    for (const fragment of fragments) expect(door?.x ?? 0).toBeGreaterThan(fragment.x);
   });
 });

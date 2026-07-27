@@ -116,24 +116,61 @@ export function drawHud(
   });
 }
 
+const TOAST_LINE_HEIGHT = 12;
+/** Marge de chaque côté du texte avant de passer à la ligne (audit narratif 2026-07-26). */
+const TOAST_MAX_TEXT_WIDTH = INTERNAL_WIDTH - 48;
+const TOAST_VPAD = 5;
+const TOAST_GAP = 6;
+
+/**
+ * Découpe un texte en lignes tenant dans `maxWidth` (glouton, mot par mot).
+ * Nécessaire depuis que des toasts plus longs existent (texte des fragments,
+ * descriptions de pouvoir) : sans retour à la ligne, ils débordaient des deux
+ * côtés de l'écran (texte centré, largeur non bornée) — repéré en vérifiant
+ * visuellement les captures de la session précédente.
+ */
+function wrapToastLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const attempt = current === '' ? word : `${current} ${word}`;
+    if (current !== '' && ctx.measureText(attempt).width > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = attempt;
+    }
+  }
+  if (current !== '') lines.push(current);
+  return lines;
+}
+
 export function drawToasts(ctx: CanvasRenderingContext2D, toasts: readonly Toast[]): void {
   ctx.font = '10px Georgia, serif';
   ctx.textAlign = 'center';
-  toasts.forEach((toast, i) => {
-    const textWidth = ctx.measureText(toast.text).width;
-    const width = textWidth + 22;
-    const x = INTERNAL_WIDTH / 2;
-    const y = INTERNAL_HEIGHT - 24 - i * 22;
+  const x = INTERNAL_WIDTH / 2;
+  let bottomY = INTERNAL_HEIGHT - 15;
+  for (const toast of toasts) {
+    const lines = wrapToastLines(ctx, toast.text, TOAST_MAX_TEXT_WIDTH);
+    const boxHeight = lines.length * TOAST_LINE_HEIGHT + TOAST_VPAD * 2;
+    const width = Math.max(...lines.map((line) => ctx.measureText(line).width)) + 22;
+    const boxTop = bottomY - boxHeight;
+
     ctx.globalAlpha = Math.min(1, toast.ttl * 2);
     ctx.shadowColor = RENDERING.shadowColor;
     ctx.shadowBlur = RENDERING.shadowBlur;
     ctx.fillStyle = hexAlpha(PALETTE.ink, 0.88);
     ctx.beginPath();
-    ctx.roundRect(x - width / 2, y - 13, width, 18, 9);
+    ctx.roundRect(x - width / 2, boxTop, width, boxHeight, 9);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.fillStyle = PALETTE.parchment;
-    ctx.fillText(toast.text, x, y);
+    lines.forEach((line, li) => {
+      ctx.fillText(line, x, boxTop + TOAST_VPAD + (li + 1) * TOAST_LINE_HEIGHT - 2);
+    });
     ctx.globalAlpha = 1;
-  });
+
+    bottomY = boxTop - TOAST_GAP;
+  }
 }
