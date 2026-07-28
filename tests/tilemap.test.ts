@@ -152,84 +152,104 @@ describe('mergeSolidTiles — fusion des tuiles en dalles', () => {
   });
 });
 
-describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, v3)', () => {
+describe('salle marge_01 — chapitre 1 « La Marge » (données réelles, refonte 2026-07-28)', () => {
   const map = parseTiledMap(marge01);
 
   it('a les dimensions attendues et un contour fermé', () => {
-    expect(map.widthTiles).toBe(64);
+    expect(map.widthTiles).toBe(66);
     expect(map.heightTiles).toBe(17);
-    // Sol continu sur les 3 rangées du bas (pas de chute mortelle dans la marge).
-    for (let tx = 1; tx <= 62; tx++) {
-      expect(gidAt(map, tx, 14)).toBeGreaterThan(0);
-      expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
-    }
     // Bord haut + marges gauche/droite pleines.
-    for (let tx = 0; tx < 64; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let tx = 0; tx < 66; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
     for (let ty = 0; ty < 17; ty++) {
       expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
-      expect(gidAt(map, 63, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, 65, ty)).toBeGreaterThan(0);
     }
   });
 
-  it('contient les objets requis, dont les mots-loi', () => {
+  it('le parcours d\'intro (sans pouvoir) a un trou à sauter, sans chute mortelle ailleurs', () => {
+    // Sol plein avant et après le trou (x8-9).
+    for (const tx of [1, 7, 10, 20, 40, 64]) {
+      expect(gidAt(map, tx, 14)).toBeGreaterThan(0);
+      expect(gidAt(map, tx, 16)).toBeGreaterThan(0);
+    }
+    expect(gidAt(map, 8, 14)).toBe(0);
+    expect(gidAt(map, 9, 14)).toBe(0);
+  });
+
+  it('un muret (2 tuiles de haut) force un saut avant le PNJ/la plume', () => {
+    // Bosse posée SUR le sol déjà continu à cet endroit (x14-15).
+    expect(gidAt(map, 14, 12)).toBeGreaterThan(0);
+    expect(gidAt(map, 15, 12)).toBeGreaterThan(0);
+    expect(gidAt(map, 14, 14)).toBeGreaterThan(0); // le sol sous le muret reste solide
+  });
+
+  it('contient les objets requis, dont le mot-loi et son blanc', () => {
     const types = new Set(map.objects.map((o) => o.type));
     for (const required of ['spawn', 'npc', 'word', 'fragment', 'inkwell', 'door', 'canon']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
-    expect(types.has('unwritten')).toBe(false); // plus de plateformes pré-placées
-    // Plus de sorties séparées (retour de playtest 2026-07-22) : une seule
-    // porte, en fin de parcours, termine le chapitre (voir plus bas).
-    expect(types.has('exit')).toBe(false);
+    expect(types.has('unwritten')).toBe(false);
+    expect(types.has('exit')).toBe(false); // une seule porte, voir plus bas
 
-    // Les obstacles SONT des mots-loi : 2 barrières (enfermé, jamais) + 1 blanc.
+    // Un seul mot-loi désormais (« enfant ») + son blanc (« . ») : plus de
+    // mot-cage neutre séparé (le PNJ explique tout avant que le joueur agisse).
     const canon = map.objects.filter((o) => o.type === 'canon');
+    expect(canon).toHaveLength(2);
     const modes = canon.map((o) => o.properties['mode']);
     expect(new Set(modes)).toEqual(new Set(['barrier', 'latent']));
-    const barrierTexts = canon
-      .filter((o) => o.properties['mode'] === 'barrier')
-      .map((o) => o.properties['text']);
-    expect(new Set(barrierTexts)).toEqual(new Set(['enfermé', 'jamais']));
   });
 
-  it('« enfermé » : mot-cage de départ, hors décor fixe, neutre (apprentissage)', () => {
-    // Objet "canon" en x14-15 : le calque ground reste vide là où il se dresse.
-    for (let ty = 8; ty <= 13; ty++) {
-      expect(gidAt(map, 14, ty)).toBe(0);
-      expect(gidAt(map, 15, ty)).toBe(0);
-    }
-    const enferme = map.objects.find((o) => o.properties['text'] === 'enfermé');
-    expect(enferme?.properties['mode']).toBe('barrier');
-    expect(enferme?.properties['flag']).toBe('efface_enferme');
-    expect(enferme?.properties['leaning']).toBeUndefined(); // neutre : ne pèse pas sur la fin
+  it('le PNJ est rencontré en premier derrière le muret, la plume juste après', () => {
+    const word = map.objects.find((o) => o.type === 'word');
+    const npc = map.objects.find((o) => o.type === 'npc');
+    expect(word?.properties['ability']).toBe('ecrire');
+    expect(npc?.properties['dialogue']).toBe('pnj_marge');
+    // Tous deux au-delà du muret (colonnes 14-15).
+    expect(word?.x).toBeGreaterThan(15 * 16);
+    expect(npc?.x).toBeGreaterThan(15 * 16);
+    // Le PNJ avant la plume, dans cet ordre.
+    expect(npc?.x).toBeLessThan(word?.x ?? 0);
+    // Proches l'un de l'autre, pas à des bouts opposés du niveau.
+    expect(Math.abs((word?.x ?? 0) - (npc?.x ?? 0))).toBeLessThanOrEqual(4 * 16);
   });
 
-  it('la passerelle POINT FINAL a un trou de 2 tuiles : le blanc ▢ à combler', () => {
-    // Passerelle en rangée 9, ininterrompue sauf le trou x40-41.
-    expect(gidAt(map, 39, 9)).toBeGreaterThan(0);
-    expect(gidAt(map, 40, 9)).toBe(0); // ▢
-    expect(gidAt(map, 41, 9)).toBe(0); // ▢
-    expect(gidAt(map, 42, 9)).toBeGreaterThan(0);
+  it('« enfant » : mot-loi à raturer, penche vers RATURE', () => {
+    const enfant = map.objects.find((o) => o.properties['text'] === 'enfant');
+    expect(enfant?.properties['mode']).toBe('barrier');
+    expect(enfant?.properties['flag']).toBe('rature_jamais');
+    expect(enfant?.properties['leaning']).toBe(-1);
+    expect(enfant?.properties['exclusiveWith']).toBe('nom_ecrit');
+    // Ground vide là où le mot-loi se dresse (objet "canon", pas du décor fixe).
+    const tiles = objectTiles({
+      x: enfant?.x ?? 0,
+      y: enfant?.y ?? 0,
+      width: enfant?.width ?? 0,
+      height: enfant?.height ?? 0,
+    });
+    for (const tile of tiles) expect(gidAt(map, tile.x, tile.y)).toBe(0);
   });
 
-  it('« jamais » : barrage final effaçable qui penche vers RATURE', () => {
-    // Objet "canon" en x50-51 : ground vide là où il se dresse.
-    for (let ty = 8; ty <= 13; ty++) {
-      expect(gidAt(map, 50, ty)).toBe(0);
-      expect(gidAt(map, 51, ty)).toBe(0);
-    }
-    const jamais = map.objects.find((o) => o.properties['text'] === 'jamais');
-    expect(jamais?.properties['mode']).toBe('barrier');
-    expect(jamais?.properties['flag']).toBe('rature_jamais');
-    expect(jamais?.properties['leaning']).toBe(-1);
+  it('la passerelle POINT FINAL a un trou de 2 tuiles : le blanc « . » à combler', () => {
+    expect(gidAt(map, 37, 9)).toBeGreaterThan(0);
+    expect(gidAt(map, 38, 9)).toBe(0); // blanc
+    expect(gidAt(map, 39, 9)).toBe(0); // blanc
+    expect(gidAt(map, 40, 9)).toBeGreaterThan(0);
+
+    const blanc = map.objects.find((o) => o.properties['mode'] === 'latent');
+    expect(blanc?.properties['text']).toBe('.');
+    expect(blanc?.properties['flag']).toBe('nom_ecrit');
+    expect(blanc?.properties['leaning']).toBe(1);
+    expect(blanc?.properties['exclusiveWith']).toBe('rature_jamais');
   });
 
   it('porte vers chapitre_01, seule et à la toute fin du niveau, termine le chapitre', () => {
     const door = map.objects.find((o) => o.type === 'door');
     expect(door).toBeDefined();
     expect(door?.properties['targetRoom']).toBe('chapitre_01');
-    // Au-delà du barrage "jamais" (colonnes 50-51) : l'atteindre est le seul
-    // moyen physique de finir le niveau, quelle que soit la route choisie.
-    expect(door?.x).toBeGreaterThan(51 * 16);
+    // Au-delà du mot-loi « enfant » : l'atteindre est le seul moyen physique
+    // de finir le niveau, quelle que soit la route choisie.
+    const enfant = map.objects.find((o) => o.properties['text'] === 'enfant');
+    expect(door?.x).toBeGreaterThan((enfant?.x ?? 0) + (enfant?.width ?? 0));
     expect(door?.properties['endsChapter']).toBe('chapitre1');
   });
 
@@ -300,29 +320,51 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(wall?.properties['crackY']).toBeUndefined();
   });
 
-  it('deux murs BRÈCHE "points faibles" dans l\'arène : mur plein jusqu\'au sol (jamais le sol), fissure restreinte en hauteur (retour de playtest 2026-07-26, précisé D16-bis)', () => {
-    const gauntletWalls = map.objects.filter((o) => o.type === 'breche_wall' && o.name !== 'mur_breche');
-    expect(gauntletWalls).toHaveLength(2);
+  it('2 murs BRÈCHE "points faibles" de l\'arène, retravaillés le 2026-07-29 : le premier (vertical) n\'est cassable qu\'au-dessus d\'une hauteur commune, le second est horizontal et posé pile à cette hauteur', () => {
+    const wall1 = map.objects.find((o) => o.name === 'mur_breche_gauntlet_1');
+    const wall2 = map.objects.find((o) => o.name === 'mur_breche_gauntlet_2');
+    expect(wall1).toBeDefined();
+    expect(wall2).toBeDefined();
     const floorStartRow = map.heightTiles - 3;
-    for (const wall of gauntletWalls) {
-      const col = Math.floor(wall.x / 16);
-      // La colonne entière est solide dans "ground"...
-      for (let ty = 0; ty < map.heightTiles; ty++) expect(gidAt(map, col, ty)).toBeGreaterThan(0);
-      // ...et l'objet BRÈCHE lui-même couvre toute la hauteur jusqu'au sol,
-      // jamais le sol (casser n'importe où dans cet objet ouvre tout le mur
-      // d'un coup, même mécanique tout-ou-rien que le mur simple ci-dessus).
-      expect(wall.y).toBe(0);
-      expect(wall.height).toBe(floorStartRow * 16);
-      expect(typeof wall.properties['flag']).toBe('string');
-      // Seule la fissure DESSINÉE est restreinte à une bande étroite : il
-      // faut grimper jusque-là pour la voir/l'atteindre en premier.
-      expect(typeof wall.properties['crackY']).toBe('number');
-      expect(wall.properties['crackHeight']).toBeLessThan((map.heightTiles * 16) / 4);
+
+    // Mur 1 : colonne entière solide dans "ground" (base + partie haute)...
+    const col1 = Math.floor((wall1?.x ?? 0) / 16);
+    for (let ty = 0; ty < map.heightTiles; ty++) expect(gidAt(map, col1, ty)).toBeGreaterThan(0);
+    // ...mais l'objet BRÈCHE (donc la partie réellement cassable) s'arrête
+    // bien avant le sol : sa base reste un mur ordinaire, jamais cassable
+    // (contrairement à l'ancienne version, tout le mur était cassable).
+    expect(wall1?.y).toBe(0);
+    expect(wall1?.height).toBeLessThan(floorStartRow * 16);
+    expect(typeof wall1?.properties['flag']).toBe('string');
+    // Plus besoin de crackY/crackHeight : l'objet est déjà restreint à la
+    // bonne hauteur, la fissure couvre son étendue par défaut.
+    expect(wall1?.properties['crackY']).toBeUndefined();
+
+    // Mur 2 : horizontal (plus large que haut), posé pile à la hauteur où
+    // le mur 1 devient cassable — les deux points faibles se rejoignent.
+    expect(wall2?.width ?? 0).toBeGreaterThan(wall2?.height ?? 0);
+    expect(wall2?.y).toBe(wall1?.height);
+    expect(typeof wall2?.properties['flag']).toBe('string');
+    expect(wall2?.properties['crackY']).toBeUndefined();
+
+    // Retravaillé une 2e fois le même jour (retour de Lucas) : le plafond
+    // doit bloquer TOUTE la longueur du corridor à cette hauteur, mais seule
+    // une partie fragile, plus loin (pas juste après le mur 1), est
+    // réellement cassable.
+    const wall2Row = (wall2?.y ?? 0) / 16;
+    const wall2ColStart = Math.floor((wall2?.x ?? 0) / 16);
+    const wall2Width = (wall2?.width ?? 0) / 16;
+    // Le plafond solide (calque "ground") s'étend bien avant la partie
+    // fragile, vers le mur 1 : le joueur ne peut pas grimper n'importe où
+    // le long du plafond pour trouver un passage, seule la partie fragile
+    // (une fois cassée) en ouvre un.
+    for (let tx = col1 + 1; tx < wall2ColStart; tx++) {
+      expect(gidAt(map, tx, wall2Row)).toBeGreaterThan(0);
     }
-    // Hauteurs de fissure différentes : un point faible en haut de l'arène, un plus bas.
-    const crackYs = gauntletWalls.map((w) => w.properties['crackY'] as number).sort((a, b) => a - b);
-    expect(crackYs[0]).toBeLessThan(10 * 16);
-    expect(crackYs[1]).toBeGreaterThan(15 * 16);
+    // Cette portion solide-mais-jamais-cassable (entre le mur 1 et la
+    // partie fragile) est nettement plus longue que la partie fragile
+    // elle-même : le point faible est loin du mur 1, pas juste après.
+    expect(wall2ColStart - col1).toBeGreaterThan(wall2Width * 2);
   });
 
   it('casser n\'importe quel mur BRÈCHE ne perce jamais le sol (régression : une Rature en poursuite tombait dans le trou et restait bloquée)', () => {
@@ -404,7 +446,7 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
   });
 });
 
-describe('salle ratures_01 — zone 3 « Les Ratures » (finalisée : AILES, 3 fragments, ennemis, palier de sortie)', () => {
+describe('salle ratures_01 — zone 3 « Les Ratures » (AILES, chambre des mots, porte du temple)', () => {
   const map = parseTiledMap(ratures01);
 
   it('a un contour fermé', () => {
@@ -415,41 +457,46 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (finalisée : AILES, 3 f
     }
   });
 
-  it('contient un unique PNJ, un encrier, 3 fragments, 2 ennemis et 2 portes ; aucun boss ni canon', () => {
+  it('contient 3 PNJ, un encrier, 2 portes, 7 mots-transformation et 2 consoles ; aucun ennemi, fragment, boss ni canon', () => {
     const types = new Set(map.objects.map((o) => o.type));
-    for (const required of ['spawn', 'npc', 'inkwell', 'fragment', 'word', 'enemy', 'door']) {
+    for (const required of ['spawn', 'npc', 'inkwell', 'word', 'door', 'transform_word', 'console']) {
       expect(types.has(required), `objet manquant : ${required}`).toBe(true);
     }
-    expect(map.objects.filter((o) => o.type === 'npc')).toHaveLength(1);
-    expect(map.objects.filter((o) => o.type === 'fragment')).toHaveLength(3);
-    expect(map.objects.filter((o) => o.type === 'enemy')).toHaveLength(2);
+    expect(map.objects.filter((o) => o.type === 'npc')).toHaveLength(3);
     expect(map.objects.filter((o) => o.type === 'door')).toHaveLength(2);
+    expect(map.objects.filter((o) => o.type === 'transform_word')).toHaveLength(7);
+    expect(map.objects.filter((o) => o.type === 'console')).toHaveLength(2);
+    // Les 3 fragments + PNJ-gardien de l'ancienne porte-palier sont retirés
+    // (retour de Lucas 2026-07-27) : la chambre des mots est le contenu de
+    // cette zone, une collecte séparée faisait doublon. Les 2 ennemis
+    // communs sont retirés à leur tour (retour de Lucas 2026-07-29).
+    expect(types.has('enemy')).toBe(false);
+    expect(types.has('fragment')).toBe(false);
     expect(types.has('boss')).toBe(false);
     expect(types.has('canon')).toBe(false);
   });
 
-  it('le PNJ pointe vers le dialogue pnj_ratures', () => {
-    const npc = map.objects.find((o) => o.type === 'npc');
-    expect(npc?.properties['dialogue']).toBe('pnj_ratures');
+  it('le PNJ La Rature qui regrette pointe vers pnj_ratures et se trouve à l\'entrée de la chambre des mots (avant tous ses objets)', () => {
+    const npc = map.objects.find((o) => o.properties['dialogue'] === 'pnj_ratures');
+    expect(npc).toBeDefined();
+    const chamberObjects = map.objects.filter((o) => o.type === 'transform_word' || o.type === 'console');
+    for (const obj of chamberObjects) expect(npc?.x ?? 0).toBeLessThan(obj.x);
   });
 
-  it('les 3 fragments ont chacun un flag distinct et préfixé "fragment_"', () => {
-    const fragments = map.objects.filter((o) => o.type === 'fragment');
-    const flags = fragments.map((f) => f.properties['flag']);
-    expect(new Set(flags).size).toBe(3);
-    for (const flag of flags) {
-      expect(typeof flag).toBe('string');
-      expect((flag as string).startsWith('fragment_')).toBe(true);
-    }
-  });
-
-  it('contient exactement les 2 ennemis communs (Coquille, Rature), séparés par une marge de sécurité', () => {
-    const enemies = map.objects.filter((o) => o.type === 'enemy');
-    const kinds = enemies.map((o) => o.properties['kind']);
-    expect(new Set(kinds)).toEqual(new Set(['coquille', 'rature']));
-    const [a, b] = [...enemies].sort((x, y) => x.x - y.x);
-    // Aucun chevauchement/contact entre les deux zones de patrouille.
-    expect((b?.x ?? 0)).toBeGreaterThanOrEqual((a?.x ?? 0) + (a?.width ?? 0));
+  it('2 PNJ-indice (retour de Lucas 2026-07-29), avant La Rature qui regrette, à des hauteurs différentes (retravaillé le même jour : plateformes, pas alignés au sol)', () => {
+    const npcs = map.objects.filter((o) => o.type === 'npc');
+    const personnage = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_personnage');
+    const bleu = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_bleu');
+    const rature = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures');
+    expect(personnage).toBeDefined();
+    expect(bleu).toBeDefined();
+    expect(personnage?.x ?? 0).toBeLessThan(rature?.x ?? 0);
+    expect(bleu?.x ?? 0).toBeLessThan(rature?.x ?? 0);
+    // Ni l'un ni l'autre au sol (row14*16=224) : les deux perchés sur une
+    // plateforme, à des hauteurs distinctes l'une de l'autre.
+    expect(personnage?.y ?? 0).toBeLessThan(200);
+    expect(bleu?.y ?? 0).toBeLessThan(200);
+    expect(personnage?.y).not.toBe(bleu?.y);
   });
 
   it('offre le mot-pouvoir AILES avant le gouffre qu\'il permet de franchir (D16 : migration jamais faite jusqu\'ici)', () => {
@@ -489,13 +536,33 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (finalisée : AILES, 3 f
     expect(typeof targetX === 'number' && Math.abs(targetX - (door?.x ?? 0)) > 32).toBe(true);
   });
 
-  it('la porte-palier est verrouillée par la phrase composée (les 3 fragments) et boucle sur la même salle', () => {
-    const door = map.objects.find((o) => o.type === 'door' && o.properties['requiresFlag'] === 'ratures_phrase_composee');
+  it('la chambre des mots propose 4 sujets (dont un féminin) et 3 attributs, tous distincts', () => {
+    const words = map.objects.filter((o) => o.type === 'transform_word');
+    const subjects = words.filter((w) => w.properties['role'] === 'subject');
+    const attributes = words.filter((w) => w.properties['role'] === 'attribute');
+    expect(subjects).toHaveLength(4);
+    expect(attributes).toHaveLength(3);
+    expect(new Set(subjects.map((w) => w.properties['wordId'])).size).toBe(4);
+    expect(new Set(attributes.map((w) => w.properties['wordId'])).size).toBe(3);
+    expect(subjects.some((w) => w.properties['gender'] === 'f')).toBe(true);
+    // Le seul mot câblé à un effet cette passe (voir data/chapters/ratures_01.json).
+    expect(subjects.some((w) => w.properties['wordId'] === 'soleil')).toBe(true);
+    expect(attributes.some((w) => w.properties['wordId'] === 'jaune')).toBe(true);
+  });
+
+  it('2 consoles de rôles distincts (valider/annuler)', () => {
+    const panels = map.objects.filter((o) => o.type === 'console');
+    expect(panels).toHaveLength(2);
+    expect(new Set(panels.map((p) => p.properties['role']))).toEqual(new Set(['validate', 'cancel']));
+  });
+
+  it('la porte du temple est déjà ouverte sur RATURE (requiresFlagUnless) mais requiert la bonne phrase sinon, porte le toast de fin, et se trouve après tous les mots/consoles', () => {
+    const door = map.objects.find((o) => o.type === 'door' && o.properties['requiresFlag'] === 'temple_code_trouve');
     expect(door).toBeDefined();
+    expect(door?.properties['requiresFlagUnless']).toBe('rature_jamais');
     expect(door?.properties['targetRoom']).toBe('ratures_01');
     expect(door?.properties['showsCompletionToast']).toBe(true);
-    // Placée après tous les fragments, pas avant.
-    const fragments = map.objects.filter((o) => o.type === 'fragment');
-    for (const fragment of fragments) expect(door?.x ?? 0).toBeGreaterThan(fragment.x);
+    const chamberObjects = map.objects.filter((o) => o.type === 'transform_word' || o.type === 'console');
+    for (const obj of chamberObjects) expect(door?.x ?? 0).toBeGreaterThan(obj.x);
   });
 });

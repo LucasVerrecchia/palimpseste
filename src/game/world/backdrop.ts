@@ -22,7 +22,7 @@
  * de l'id de salle pour que deux salles ne soient pas des copies exactes.
  */
 import { seededRandom, tileIndicesCovering } from '../../engine/parallax';
-import { BACKDROP, hexAlpha, INTERNAL_WIDTH, PALETTE } from '../config';
+import { BACKDROP, hexAlpha, INTERNAL_HEIGHT, INTERNAL_WIDTH, PALETTE } from '../config';
 
 export type BackdropKind = 'manuscrit';
 
@@ -34,6 +34,18 @@ export function resolveBackdropKind(roomId: string): BackdropKind | null {
   return BACKDROP_ROOMS.has(roomId) ? 'manuscrit' : null;
 }
 
+/**
+ * Salles où le décor est nocturne (demande de Lucas, 2026-07-28) : ciel
+ * assombri, lune à la place du soleil, étoiles. `Set` pour rester cohérent
+ * avec `BACKDROP_ROOMS` si d'autres salles deviennent nocturnes plus tard.
+ */
+const NIGHT_ROOMS = new Set(['marge_01']);
+
+/** Fonction pure isolée du canvas : testable seule. */
+export function isNightRoom(roomId: string): boolean {
+  return NIGHT_ROOMS.has(roomId);
+}
+
 /** Petit hash de chaîne : décale les seeds par salle pour varier l'agencement sans changer la recette. */
 function hashSeed(id: string): number {
   let h = 0;
@@ -43,25 +55,63 @@ function hashSeed(id: string): number {
 
 // ---------- Éléments uniques (non tuilés) ----------
 
-/** Soleil : un seul par salle, quasi immobile (facteur très lent appliqué par l'appelant). Rayons "dessinés" (DA D9). */
-function drawSun(ctx: CanvasRenderingContext2D, roomWidth: number, roomHeight: number, roomSeed: number): void {
+/**
+ * Soleil : un seul par salle, quasi immobile (facteur très lent appliqué par
+ * l'appelant). Rayons "dessinés" (DA D9). `color` par défaut = `PALETTE.sepia`
+ * (le sépia du reste du décor) ; un appelant peut le remplacer — la chambre
+ * des mots de `ratures_01` (`narrative/world_transform.ts`) permet au joueur
+ * de le faire "devenir" une autre couleur, effet global (toutes les salles).
+ */
+function drawSun(
+  ctx: CanvasRenderingContext2D,
+  roomWidth: number,
+  roomHeight: number,
+  roomSeed: number,
+  color: string,
+  moon: boolean = false,
+): void {
   const seed = roomSeed + 5000;
-  const cx = roomWidth * (0.15 + seededRandom(seed) * 0.5);
+  // La position doit rester visible quelle que soit la position caméra dans
+  // TOUTE la salle, pas seulement au chargement : à facteur de parallaxe
+  // constant (BACKDROP.sunFactor), le soleil défile de `-camera.x * sunFactor`
+  // écran — au-delà d'une certaine largeur de salle, une position tirée sur
+  // toute la largeur du MONDE finit hors-champ pour toutes les positions
+  // caméra atteignables (bug trouvé en vérifiant visuellement la chambre des
+  // mots de `ratures_01`, salle large de 102 tuiles). On tire donc `cx` dans
+  // la fenêtre qui reste garantie visible pour toute caméra ∈ [0, camMax].
+  const camMax = Math.max(0, roomWidth - INTERNAL_WIDTH);
+  const safeMin = BACKDROP.sunFactor * camMax;
+  const safeMax = INTERNAL_WIDTH;
+  const cx = safeMin + seededRandom(seed) * Math.max(0, safeMax - safeMin);
   const cy = roomHeight * (0.14 + seededRandom(seed + 1) * 0.08);
   const r = 20;
 
   const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.8);
-  glow.addColorStop(0, hexAlpha(PALETTE.sepia, 0.18));
-  glow.addColorStop(1, hexAlpha(PALETTE.sepia, 0));
+  glow.addColorStop(0, hexAlpha(color, moon ? 0.14 : 0.18));
+  glow.addColorStop(1, hexAlpha(color, 0));
   ctx.fillStyle = glow;
   ctx.beginPath();
   ctx.arc(cx, cy, r * 1.8, 0, Math.PI * 2);
   ctx.fill();
 
+  if (moon) {
+    // Lune : disque plein (pas de rayons, une lune n'en a pas) + un arc plus
+    // sombre en croissant pour suggérer un relief sans détailler des cratères.
+    ctx.fillStyle = hexAlpha(color, 0.55);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = hexAlpha(PALETTE.ink, 0.12);
+    ctx.beginPath();
+    ctx.arc(cx + r * 0.18, cy - r * 0.08, r * 0.46, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
   const rayCount = 8;
   const rayInner = r * 0.75;
   const rayOuter = r * 1.15;
-  ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.3);
+  ctx.strokeStyle = hexAlpha(color, 0.3);
   ctx.lineWidth = 1;
   ctx.lineCap = 'round';
   for (let i = 0; i < rayCount; i++) {
@@ -73,11 +123,27 @@ function drawSun(ctx: CanvasRenderingContext2D, roomWidth: number, roomHeight: n
     ctx.stroke();
   }
 
-  ctx.strokeStyle = hexAlpha(PALETTE.sepia, 0.35);
+  ctx.strokeStyle = hexAlpha(color, 0.35);
   ctx.lineWidth = 1.2;
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.55, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+/** Étoiles éparses (salles de nuit uniquement) : simples points, quelques tailles. */
+function drawStarTile(ctx: CanvasRenderingContext2D, tileX: number, tileWidth: number, roomHeight: number, roomSeed: number): void {
+  const seed = Math.round(tileX) * 97 + roomSeed + 1500;
+  if (seededRandom(seed) < 0.35) return;
+  const count = 2 + Math.floor(seededRandom(seed + 1) * 3);
+  ctx.fillStyle = hexAlpha(PALETTE.unwritten, 0.6);
+  for (let i = 0; i < count; i++) {
+    const sx = tileX + seededRandom(seed + 10 + i) * tileWidth;
+    const sy = roomHeight * (0.04 + seededRandom(seed + 20 + i) * 0.4);
+    const r = 0.6 + seededRandom(seed + 30 + i) * 0.8;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 // ---------- Plans tuilés ----------
@@ -245,6 +311,20 @@ function renderTiledLayer(
 }
 
 /**
+ * Voile atmosphérique optionnel sur tout le décor : contrairement au soleil
+ * (une forme, une position), « le ciel » n'a pas d'existence propre dans le
+ * rendu — c'est un lavis en écran fixe (aucun défilement, un ciel n'a pas de
+ * position), à faible opacité pour continuer à lire "à travers" le
+ * parchemin. `null` = pas de voile (comportement par défaut, aucune salle
+ * n'a encore fait "devenir" son ciel).
+ */
+function drawSkyWash(ctx: CanvasRenderingContext2D, color: string | null): void {
+  if (color === null) return;
+  ctx.fillStyle = hexAlpha(color, 0.14);
+  ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+}
+
+/**
  * Dessine le fond lointain de la salle courante (7 plans), s'il y en a un
  * pour cette salle. Appelée par `Game.render` juste après la texture
  * papier : les motifs sont volontairement translucides, pensés pour lire
@@ -258,15 +338,34 @@ export function renderBackdrop(
   roomWidth: number,
   roomHeight: number,
   time: number,
+  sunColor: string = PALETTE.sepia,
+  skyColor: string | null = null,
 ): void {
   if (resolveBackdropKind(roomId) === null) return;
   const roomSeed = hashSeed(roomId);
   const baseline = roomHeight * 0.72;
+  const night = isNightRoom(roomId);
+
+  if (night) {
+    // Voile de nuit (demande de Lucas, 2026-07-28) : uniquement marge_01
+    // pour l'instant, indépendant du voile "ciel" de la chambre des mots
+    // (rare recoupement possible via Admin, ignoré volontairement).
+    ctx.fillStyle = hexAlpha(PALETTE.ink, BACKDROP.nightWashAlpha);
+    ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+  } else {
+    drawSkyWash(ctx, skyColor);
+  }
 
   ctx.save();
   ctx.translate(-cameraX * BACKDROP.sunFactor, -cameraY * BACKDROP.sunFactor);
-  drawSun(ctx, roomWidth, roomHeight, roomSeed);
+  drawSun(ctx, roomWidth, roomHeight, roomSeed, night ? PALETTE.unwritten : sunColor, night);
   ctx.restore();
+
+  if (night) {
+    renderTiledLayer(ctx, cameraX, cameraY, BACKDROP.starsFactor, BACKDROP.starsTileWidth, (x, w) => {
+      drawStarTile(ctx, x, w, roomHeight, roomSeed);
+    });
+  }
 
   renderTiledLayer(ctx, cameraX, cameraY, BACKDROP.cloudsFactor, BACKDROP.cloudsTileWidth, (x, w) => {
     drawCloudTile(ctx, x, w, roomHeight, roomSeed);

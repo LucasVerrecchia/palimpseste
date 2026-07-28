@@ -1,0 +1,18 @@
+{
+  "id": "pnj_ratures_indice_personnage",
+  "start": "intro",
+  "startVariants": [
+    { "when": { "rature_jamais": true }, "start": "rature_intro" }
+  ],
+  "_comment": "[proposition narration, à valider avec Lucas]. Nouveau PNJ (retour de Lucas 2026-07-29) : sur la voie POINT FINAL/indécise, remplace le libre recoloriage par un vrai code à assembler, obtenu en interrogeant plusieurs PNJ à différents endroits du niveau. Celui-ci donne un indice sur le SUJET du code (« personnage ») sans le nommer — retravaillé le même jour (2e retour) : le code passe de « soleil devint jaune » (trop évident) à « personnage devint bleu », l'indice doit rester une devinette (élimination : ni le ciel, ni la page, ni ce qui brille) plutôt que de nommer le mot. Sur RATURE, la porte est déjà ouverte : l'indice ne sert à rien, dit sans détour.",
+  "nodes": {
+    "intro": {
+      "speaker": "Le Griffonnage",
+      "text": "Ce n'est ni le ciel, ni la page, ni ce qui brille au-dessus de tout. C'est peut-être la seule chose, dans cette histoire, qui peut encore choisir."
+    },
+    "rature_intro": {
+      "speaker": "Le Griffonnage",
+      "text": "Toi, tu n'as pas besoin de mes indices. Ta porte te reconnaît déjà."
+    }
+  }
+}

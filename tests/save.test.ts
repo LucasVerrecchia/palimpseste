@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadJson, saveJson, type StorageLike } from '../src/engine/save';
-import { parseSave, SAVE_VERSION, type SaveData } from '../src/game/save';
+import { parseSave, saveKey, SAVE_SLOT_COUNT, SAVE_VERSION, type SaveData } from '../src/game/save';
 
 /** Faux localStorage en mémoire pour les tests. */
 function fakeStorage(initial: Record<string, string> = {}): StorageLike {
@@ -49,5 +49,24 @@ describe('sauvegarde versionnée', () => {
     expect(parseSave({ ...validSave, playerPos: { room: 'x' } })).toBeNull();
     expect(parseSave({ ...validSave, storyFlags: { a: 'texte' } })).toBeNull();
     expect(parseSave(null)).toBeNull();
+  });
+});
+
+describe('emplacements de sauvegarde (écran-titre, 2026-07-28)', () => {
+  it('saveKey produit une clé distincte et stable par emplacement', () => {
+    expect(saveKey(1)).toBe(saveKey(1));
+    expect(saveKey(1)).not.toBe(saveKey(2));
+    expect(saveKey(2)).not.toBe(saveKey(3));
+  });
+
+  it('chaque emplacement est une partie indépendante dans le stockage', () => {
+    const storage = fakeStorage();
+    saveJson(storage, saveKey(1), validSave);
+    expect(loadJson(storage, saveKey(1), parseSave)).toEqual(validSave);
+    expect(loadJson(storage, saveKey(2), parseSave)).toBeNull();
+  });
+
+  it('expose au moins 2 emplacements', () => {
+    expect(SAVE_SLOT_COUNT).toBeGreaterThanOrEqual(2);
   });
 });

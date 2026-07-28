@@ -1,63 +1,38 @@
 {
   "id": "pnj_marge",
   "start": "intro",
-  "_comment": "[proposition narration — à valider avec Lucas]. Le PNJ pose la règle du chapitre : la phrase gravée dit que tu ne sortiras JAMAIS ; à toi de la dévier (raturer 'jamais' OU compléter le blanc de ton nom). Audit narratif 2026-07-26 : les choix de ce noeud ne pesaient sur rien (flags intention_rature/intention_point poses mais jamais lus) alors que le PNJ-miroir de ratures_01 fait deja pencher endingLeaning pour un choix symetrique (set_leaning) ; ajoute ici pour coherence, memes deltas +-0.5 que pnj_ratures.json.",
+  "_comment": "[proposition narration, à valider avec Lucas]. Refonte du 2026-07-28 (demande de Lucas) : le PNJ explique tout AVANT que le joueur agisse (pouvoir de la plume + les deux voies), fini le geste d'essai neutre de l'ancien design. Le choix se fait maintenant dans le monde (raturer « enfant » / dessiner le point), plus dans le dialogue : plus de noeud à choix ni de set_leaning ici, le penchant vient des gestes physiques (tryRatureCanon/checkBlanks, game.ts), comme sur le reste du chapitre. Texte retouché le 2026-07-28 pour retirer tous les tirets (retour explicite de Lucas, tell d'IA générative) et faire écho à la nouvelle phrase RATURE (« Un mot qui avait soif de liberté »).",
+  "startVariants": [
+    { "when": { "rature_jamais": true }, "start": "revisite_rature" },
+    { "when": { "nom_ecrit": true }, "start": "revisite_point" }
+  ],
   "nodes": {
     "intro": {
       "speaker": "Le Signet",
-      "text": "Réveillé, petit mot ? Tu n'as pas de chance : tu es tombé dans la marge, là où la page s'effrite.",
-      "next": "regle"
+      "text": "Tu es passé derrière le mur. Bien. Plus loin, contre la page, une plume attend. Elle est à toi.",
+      "next": "pouvoir"
     },
-    "regle": {
+    "pouvoir": {
       "speaker": "Le Signet",
-      "text": "Lève les yeux. La première phrase du livre est gravée là-haut. Elle te dit « enfermé », puis « jamais sorti ». Et ce qui est écrit... arrive.",
-      "next": "espoir"
+      "text": "Clic gauche pour tracer de l'encre, clic droit pour l'effacer : elle te revient à chaque fois. C'est tout ce qu'il faut pour changer ce qui est écrit.",
+      "next": "phrase"
     },
-    "espoir": {
+    "phrase": {
       "speaker": "Le Signet",
-      "text": "Une plume attend d'être ramassée, non loin. Prends-la, va jusqu'au mot « enfermé » qui te barre la route, et RATURE-le (clic droit). Tu verras : effacer un mot, c'est changer ce qui arrive.",
-      "next": "choix"
+      "text": "Regarde au-dessus de toi : « Un enfant qui avait soif d'aventure… ». C'est ta phrase. Elle n'est pas encore finie.",
+      "next": "choix_explication"
     },
-    "choix": {
+    "choix_explication": {
       "speaker": "Le Signet",
-      "text": "Deux façons de tromper la phrase, tout au bout — mais une seule tiendra : rature le mot « jamais », OU comble le blanc resté après « Le mot » pour t'y écrire. La première que tu choisiras fermera l'autre pour de bon. Que préfères-tu ?",
-      "choices": [
-        {
-          "text": "Raturer ce qui m'enferme.",
-          "next": "fin_rature",
-          "effects": [
-            { "type": "set_flag", "flag": "intention_rature", "value": true },
-            { "type": "set_leaning", "delta": -0.5 }
-          ]
-        },
-        {
-          "text": "Me compléter, m'achever.",
-          "next": "fin_point",
-          "effects": [
-            { "type": "set_flag", "flag": "intention_point", "value": true },
-            { "type": "set_leaning", "delta": 0.5 }
-          ]
-        },
-        {
-          "text": "Je verrai bien.",
-          "next": "fin_doute"
-        }
-      ]
+      "text": "Plus loin, deux chemins : pose le point final à la phrase, et l'histoire continue avec toi dedans. Ou rature « enfant », et il n'y aura jamais eu d'enfant, juste un mot resté libre, hors du récit. OK pour toi ?"
     },
-    "fin_rature": {
+    "revisite_rature": {
       "speaker": "Le Signet",
-      "text": "Effacer l'Auteur... c'est une liberté qui laisse un vide. Va, petit mot.",
-      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
+      "text": "Tu as raturé « enfant ». Il n'y a plus d'histoire à continuer, juste toi, libre, dans la marge."
     },
-    "fin_point": {
+    "revisite_point": {
       "speaker": "Le Signet",
-      "text": "Te finir toi-même pour finir l'histoire... c'est noble, et sans retour. Va.",
-      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
-    },
-    "fin_doute": {
-      "speaker": "Le Signet",
-      "text": "Les brouillons ont le droit d'hésiter. Va, et reviens me lire.",
-      "effects": [{ "type": "set_flag", "flag": "pnj_marge_rencontre", "value": true }]
+      "text": "Tu as posé le point. La phrase est close, et l'aventure a commencé sans retour possible."
     }
   }
 }

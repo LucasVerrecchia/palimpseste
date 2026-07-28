@@ -17,22 +17,33 @@
  * Deuxième retour de playtest, même jour (D16-bis) : le premier mur BRÈCHE
  * (juste après le pouvoir) redevient un mur SIMPLE, entièrement cassable dès
  * le sol, comme avant — sa fissure doit couvrir tout le mur pour enseigner
- * le principe sans ambiguïté, pas de grimpe obligatoire pour LUI. En
- * revanche, les murs de l'arène (les « points faibles ») restent chacun un
- * seul mur BRÈCHE plein (même mécanique tout-ou-rien) mais leur fissure ne
- * marque qu'une bande étroite en hauteur : il faut grimper jusqu'à cette
- * bande pour l'atteindre, et une fois cassée, TOUT le mur s'ouvre d'un coup
- * (`crackY`/`crackHeight`, propriétés Tiled qui ne restreignent QUE le
- * dessin de la fissure — `registerBrecheWall`/`revealFiligrane`, room.ts,
- * restent inchangés, tout-ou-rien par objet comme depuis toujours).
+ * le principe sans ambiguïté, pas de grimpe obligatoire pour LUI.
+ *
+ * Retravaillé le 2026-07-29 (nouveau retour de Lucas, en 2 passes le même
+ * jour) : les 2 murs BRÈCHE « points faibles » de l'arène ne sont plus deux
+ * colonnes verticales identiques. Le premier (x=56) n'est désormais cassable
+ * que dans sa partie HAUTE (au-dessus de `GAUNTLET_SPLIT_ROW`) — sa base
+ * reste un mur ordinaire, jamais cassable (avant, toute la colonne l'était,
+ * la fissure n'étant qu'une restriction visuelle). Le second devient un
+ * plafond HORIZONTAL posé pile à cette même hauteur, juste après le premier :
+ * il bloque TOUTE la longueur du corridor à cette hauteur (x=57 à 67), mais
+ * seule sa partie fragile (`GAUNTLET_WALL2_WEAK_X0` à `GAUNTLET_WALL2_X1`),
+ * loin du mur 1 plutôt que juste après, est réellement cassable — le reste
+ * du plafond est un plafond ordinaire, il faut voyager le long (encre) pour
+ * trouver le point faible. Il faut donc grimper (encre) jusqu'à
+ * `GAUNTLET_SPLIT_ROW`, PUIS chercher la partie fragile du plafond, avant de
+ * pouvoir casser l'un ou l'autre mur : plus de passage possible à hauteur du
+ * sol (`registerBrecheWall`/`revealFiligrane`, room.ts, restent inchangés,
+ * tout-ou-rien par objet comme depuis toujours — seule la géométrie des
+ * objets change ici).
  *
  *   porte (retour La Marge) → mur à franchir en s'y traçant des plateformes
  *   d'encre (PLUME) → Coquille + Rature → mur BRÈCHE simple (la salle
  *   s'ouvre en hauteur juste avant lui, pour l'arène plus loin) → puits
- *   d'escalade → 2 murs BRÈCHE « points faibles » de l'arène (fissure en
- *   hauteur, mais tout le mur s'ouvre une fois cassé) → arène du mi-boss
- *   (avec fiole de secours) → porte vers ratures_01 (zone 3 « Les Ratures »,
- *   D15), verrouillée tant que le mi-boss n'est pas vaincu.
+ *   d'escalade jusqu'à GAUNTLET_SPLIT_ROW → chercher la partie fragile du
+ *   plafond horizontal (loin du mur vertical) → casser les deux → arène
+ *   du mi-boss (avec fiole de secours) → porte vers ratures_01 (zone 3
+ *   « Les Ratures », D15), verrouillée tant que le mi-boss n'est pas vaincu.
  *
  * Même convention que gen_room_marge01.mjs (D7) : géométrie décrite par des
  * rectangles nommés, JSON compatible Tiled en sortie.
@@ -68,6 +79,15 @@ const WELL_START = 34;
 // rester bloquée. Le sol (solid() plus bas) reste une bande séparée,
 // toujours solide, jamais enregistrée comme BRÈCHE.
 const WALL_HEIGHT = ROW(14) * TILE;
+
+// Hauteur commune aux 2 points faibles de l'arène (retour de Lucas
+// 2026-07-29) : le mur 1 (vertical, x=56) n'est cassable qu'AU-DESSUS de
+// cette rangée (sa base reste un mur ordinaire, jamais cassable) ; le
+// mur 2 devient HORIZONTAL et se pose pile à cette hauteur. Il faut donc
+// grimper (encre) jusque-là avant de pouvoir casser l'un ou l'autre —
+// avant, tout le mur 1 était cassable depuis le sol (la fissure n'était
+// qu'une restriction visuelle), plus de passage à hauteur du sol désormais.
+const GAUNTLET_SPLIT_ROW = 18;
 
 const grid = Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
 const solid = (x0, y0, x1, y1) => {
@@ -105,19 +125,31 @@ solid(38, 0, 38, H - 1);
 // escalier d'encre.
 solid(68, ROW(9), 72, ROW(9));
 
-// Murs BRÈCHE « points faibles » (retour de playtest 2026-07-26) : après les
-// ennemis communs (Coquille patrouille tuiles 40-45, Rature 47-52 — voir
-// game.ts pour le calcul des bornes), deux colonnes pleines du sol au
-// plafond réel de la salle, à x=56 et x=61 (large marge après les
-// patrouilles, pour ne jamais bloquer un rebond d'ennemi contre le mur).
-// Chacune est UN SEUL mur BRÈCHE plein (comme le mur simple ci-dessus) :
-// casser n'importe quelle tuile ouvre tout le mur d'un coup. Seule la
-// fissure dessinée est restreinte à une bande étroite en hauteur
-// (`crackY`/`crackHeight` sur l'objet, voir plus bas) — il faut grimper
-// jusque-là pour la voir et l'atteindre. Hauteurs différentes pour varier
-// l'escalade et donner un usage à la partie haute, autrement vide, de l'arène.
+// Murs BRÈCHE « points faibles » (retour de playtest 2026-07-26, retravaillés
+// le 2026-07-29 après un nouveau retour de Lucas) : après les ennemis
+// communs (Coquille patrouille tuiles 40-45, Rature 47-52 — voir game.ts
+// pour le calcul des bornes), à x=56 (large marge après les patrouilles,
+// pour ne jamais bloquer un rebond d'ennemi contre le mur).
+//   - Mur 1 (x=56) : colonne pleine dans "ground", mais seule sa partie
+//     AU-DESSUS de GAUNTLET_SPLIT_ROW est enregistrée comme `breche_wall`
+//     (voir l'objet plus bas) — sa base reste un mur ordinaire, jamais
+//     cassable, contrairement à l'ancienne version où toute la colonne
+//     était cassable depuis le sol.
+//   - Mur 2 : n'est plus une colonne verticale mais un plafond HORIZONTAL,
+//     posé pile à GAUNTLET_SPLIT_ROW, juste après le mur 1. Retravaillé une
+//     deuxième fois (retour de Lucas 2026-07-29, même jour) : il doit
+//     bloquer TOUTE la longueur du corridor à cette hauteur (x=57 à 67,
+//     jusqu'à l'entrée de l'arène du mi-boss), pas seulement une bande —
+//     mais seule sa partie fragile, plus loin (près de l'arène, PAS juste
+//     après le mur 1), est réellement cassable (voir l'objet BRÈCHE plus
+//     bas, qui ne couvre que cette partie). Le reste du plafond (x=57 à 64)
+//     est un plafond ordinaire, jamais cassable — il faut donc voyager
+//     le long de ce plafond (encre) pour trouver le point faible.
+const GAUNTLET_WALL2_X0 = 57;
+const GAUNTLET_WALL2_X1 = 67;
+const GAUNTLET_WALL2_WEAK_X0 = 65;
 solid(56, 0, 56, H - 1);
-solid(61, 0, 61, H - 1);
+solid(GAUNTLET_WALL2_X0, GAUNTLET_SPLIT_ROW, GAUNTLET_WALL2_X1, GAUNTLET_SPLIT_ROW);
 
 // --- Calque "filigrane" (le brouillon d'en dessous, D11/§4) ---------------
 // Entièrement vide : une fois la bande haute du mur BRÈCHE effacée, le
@@ -184,32 +216,28 @@ const objects = [
     properties: [prop('kind', 'string', 'rature')],
   },
 
-  // Murs BRÈCHE « points faibles » (retour de playtest 2026-07-26, précisé
-  // D16-bis) : chacun est UN SEUL mur BRÈCHE plein (`y`/`height` couvrent
-  // toute la salle jusqu'au sol, comme `mur_breche` ci-dessus, jamais le sol
-  // lui-même — voir WALL_HEIGHT) — casser n'importe quelle tuile ouvre TOUT
-  // le mur d'un coup, mécanique inchangée. Seule la fissure dessinée
-  // (`crackY`/`crackHeight`, lues par `crackRectOf`, game.ts) est restreinte
-  // à une bande étroite : il faut grimper jusque-là pour la voir et
-  // l'atteindre. Le premier (juste après les ennemis) est à hauteur
-  // modérée ; le second (juste avant le combat) est haut, près du plafond
-  // réel de la salle, pour donner un objectif dramatique au sommet de
-  // l'arène avant le mi-boss.
+  // Murs BRÈCHE « points faibles » de l'arène, retravaillés le 2026-07-29
+  // (retour de Lucas, en 2 passes) : le mur 1 n'est plus cassable que dans
+  // sa partie haute (base = mur ordinaire du sol à GAUNTLET_SPLIT_ROW, voir
+  // plus haut dans le fichier) — son objet BRÈCHE ne couvre donc plus que
+  // cette partie haute, plus besoin de `crackY`/`crackHeight` (l'objet est
+  // déjà restreint à la bonne hauteur, la fissure couvre son étendue par
+  // défaut, comme `mur_breche`). Le mur 2 devient un plafond HORIZONTAL posé
+  // à la même hauteur (`GAUNTLET_SPLIT_ROW`) : il faut grimper jusque-là, PUIS
+  // voyager le long du plafond (encre) jusqu'à sa partie fragile — loin du
+  // mur 1, pas juste après (2e passe de retour) — pour l'atteindre. Le reste
+  // du plafond (juste après le mur 1) bloque le passage sans jamais pouvoir
+  // être cassé.
   {
-    id: id(), name: 'mur_breche_gauntlet_1', type: 'breche_wall', x: 56 * TILE, y: 0, width: 16, height: WALL_HEIGHT,
-    properties: [
-      prop('flag', 'string', 'breche_gauntlet1_ouverte'),
-      prop('crackY', 'int', 18 * TILE),
-      prop('crackHeight', 'int', 4 * TILE),
-    ],
+    id: id(), name: 'mur_breche_gauntlet_1', type: 'breche_wall',
+    x: 56 * TILE, y: 0, width: 16, height: GAUNTLET_SPLIT_ROW * TILE,
+    properties: [prop('flag', 'string', 'breche_gauntlet1_ouverte')],
   },
   {
-    id: id(), name: 'mur_breche_gauntlet_2', type: 'breche_wall', x: 61 * TILE, y: 0, width: 16, height: WALL_HEIGHT,
-    properties: [
-      prop('flag', 'string', 'breche_gauntlet2_ouverte'),
-      prop('crackY', 'int', 5 * TILE),
-      prop('crackHeight', 'int', 4 * TILE),
-    ],
+    id: id(), name: 'mur_breche_gauntlet_2', type: 'breche_wall',
+    x: GAUNTLET_WALL2_WEAK_X0 * TILE, y: GAUNTLET_SPLIT_ROW * TILE,
+    width: (GAUNTLET_WALL2_X1 - GAUNTLET_WALL2_WEAK_X0 + 1) * TILE, height: TILE,
+    properties: [prop('flag', 'string', 'breche_gauntlet2_ouverte')],
   },
 
   // Fiole d'encre rouge : usage unique, restaure une partie des PV. Posée en

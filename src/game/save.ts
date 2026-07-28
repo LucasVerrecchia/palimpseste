@@ -4,7 +4,14 @@
  * le contrat de données et sa robustesse (version inconnue → null → new game).
  */
 
-export const SAVE_KEY = 'palimpseste_save';
+/** Nombre d'emplacements de sauvegarde proposés à l'écran-titre (2026-07-28). */
+export const SAVE_SLOT_COUNT = 3;
+
+/** Clé localStorage d'un emplacement (1..SAVE_SLOT_COUNT) — une partie indépendante par emplacement. */
+export function saveKey(slot: number): string {
+  return `palimpseste_save_${String(slot)}`;
+}
+
 // v3 : refonte du chapitre 1 (mécanique de déviation, D11) → nouvelle géométrie
 // de marge_01. Les saves v2 restauraient un playerPos de l'ancien tracé (ex.
 // encrier tout à droite) et faisaient réapparaître le joueur au mauvais endroit :

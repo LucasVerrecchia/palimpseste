@@ -10,6 +10,8 @@ export class Pointer {
   clientY = 0;
   private left = false;
   private right = false;
+  /** Front montant du clic gauche (pour les clics de menu, pas le tracé — voir `drawing`). */
+  private leftJustPressed = false;
   /** Vrai tant que le curseur est au-dessus de la surface de jeu. */
   inside = false;
 
@@ -22,7 +24,11 @@ export class Pointer {
     element.addEventListener('mousedown', (e: MouseEvent) => {
       this.clientX = e.clientX;
       this.clientY = e.clientY;
-      if (e.button === 0) this.left = true;
+      this.inside = true;
+      if (e.button === 0) {
+        if (!this.left) this.leftJustPressed = true;
+        this.left = true;
+      }
       if (e.button === 2) this.right = true;
     });
     win.addEventListener('mouseup', (e: MouseEvent) => {
@@ -49,5 +55,15 @@ export class Pointer {
 
   get erasing(): boolean {
     return this.right;
+  }
+
+  /** Le clic gauche vient d'être pressé cette frame (front montant) — clics de menu. */
+  get leftClicked(): boolean {
+    return this.leftJustPressed;
+  }
+
+  /** À appeler en fin de frame logique pour consommer le front montant (même principe qu'Input.endFrame). */
+  endFrame(): void {
+    this.leftJustPressed = false;
   }
 }

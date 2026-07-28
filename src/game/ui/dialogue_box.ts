@@ -13,6 +13,27 @@ const BOX = { x: 14, margin: 12, bottom: 12 } as const;
 const LINE_H = 13;
 const CHOICE_H = 15;
 
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Zones cliquables des choix affichés — pour le clic souris (demande de Lucas, 2026-07-28). */
+export interface DialogueLayout {
+  choiceRects: Rect[];
+}
+
+/** Choix cliqué à (x, y) — coordonnées vue (480×270) — ou null. */
+export function hitTestDialogueChoices(layout: DialogueLayout, x: number, y: number): number | null {
+  for (let i = 0; i < layout.choiceRects.length; i++) {
+    const r = layout.choiceRects[i];
+    if (r !== undefined && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
+  }
+  return null;
+}
+
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const words = text.split(' ');
   const lines: string[] = [];
@@ -34,7 +55,7 @@ export function drawDialogueBox(
   ctx: CanvasRenderingContext2D,
   node: DialogueNode,
   selectedChoice: number,
-): void {
+): DialogueLayout {
   const width = INTERNAL_WIDTH - BOX.x * 2;
   const choices = node.choices ?? [];
 
@@ -86,11 +107,13 @@ export function drawDialogueBox(
   });
 
   const choicesTop = y + headerH + textH + 6;
+  const choiceRects: Rect[] = [];
   if (choices.length > 0) {
     // Choix SOUS le texte (jamais dessus), navigation ↑/↓, sélection surlignée.
     ctx.font = '10px Georgia, serif';
     choices.forEach((choice, i) => {
       const cy = choicesTop + 10 + i * CHOICE_H;
+      choiceRects.push({ x: BOX.x + BOX.margin, y: cy - 10, w: width - BOX.margin * 2, h: CHOICE_H });
       const isSelected = i === selectedChoice;
       if (isSelected) {
         const w = ctx.measureText(choice.text).width + 20;
@@ -108,6 +131,7 @@ export function drawDialogueBox(
     ctx.textAlign = 'right';
     ctx.fillText('E …', BOX.x + width - BOX.margin, y + height - 8);
   }
+  return { choiceRects };
 }
 
 /**

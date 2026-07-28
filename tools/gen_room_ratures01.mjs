@@ -1,34 +1,41 @@
 /**
- * Générateur de la salle ratures_01 (zone 3 « Les Ratures », spec §6 : "zone
- * barbouillée du contenu supprimé, cimetière de persos coupés").
+ * Générateur de la salle ratures_01 (zone 3 « Les Ratures »).
  *
- * Porte un PNJ narratif, La Rature qui regrette (`data/dialogues/pnj_ratures.json`),
- * dont l'intro/réaction s'adapte au choix déjà fait dans La Marge
- * (`rature_jamais` / `nom_ecrit`) via `startVariants` (narrative/dialogue.ts).
+ * Porte 3 PNJ narratifs, tous adaptatifs selon le choix déjà fait dans La
+ * Marge (`rature_jamais`/`nom_ecrit`) via `startVariants`
+ * (narrative/dialogue.ts) : La Rature qui regrette
+ * (`data/dialogues/pnj_ratures.json`, à l'entrée de la chambre des mots,
+ * explique le mécanisme) + 2 PNJ-indice (retour de Lucas 2026-07-29,
+ * retravaillés une 2e fois le même jour), disposés à des endroits différents
+ * plus tôt dans le niveau — y compris en hauteur, sur un petit parcours de
+ * plateformes après le gouffre — qui donnent chacun un indice sur une
+ * moitié du CODE du temple (le sujet « personnage », l'attribut « bleu »)
+ * sur POINT FINAL/indécis, sans le nommer, remplace l'ancien essai-erreur
+ * libre des 12 combinaisons.
  *
- * Finalisation (session de planification dédiée, cf. session 17 où l'idée
- * avait été mise de côté) : le niveau était un simple couloir de traversée
- * avec 1 seul fragment — au-delà, injouable depuis D16 (voir plus bas). Trois
- * décisions structurent cette version :
- *  - AILES (double saut) migre ici, comme annoncé dans le commentaire de
- *    gen_room_chapitre01.mjs (D16) mais jamais fait : sans lui, le gouffre
- *    x=18-21 était infranchissable (portée du dash HÂTE ≈ 42px, gouffre =
- *    64px) et le fragment en hauteur, hors de portée. Mot-pouvoir ajouté
- *    juste avant le gouffre, même convention que chapitre_01.
- *  - 3 fragments à collecter (au lieu d'1), à hauteurs croissantes : au sol,
- *    à portée d'un saut simple, puis d'un double saut — pour donner un usage
- *    concret à AILES dans cette même salle.
- *  - Une fois les 3 ramassés, la phrase qu'ils composent (`resolveSentence`,
- *    variantes selon le penchant RATURE/POINT FINAL dans
- *    `data/chapters/ratures_01.json`) débloque une porte-palier
- *    (`requiresFlag:'ratures_phrase_composee'`) : la collecte devient une
- *    vraie condition de progression, pas un fragment de lore isolé. La porte
- *    boucle sur une alcôve de la même salle (pas de zone 4 à construire dans
- *    cette session — juste un point d'accroche propre pour plus tard).
- *  - 2 ennemis communs (Coquille, Rature), cohérents avec le thème « cimetière
- *    de persos coupés » — aucun nouveau type, mêmes archétypes que
- *    chapitre_01. Zones de patrouille séparées par 2 tuiles de marge (leçon
- *    D16-bis : ne jamais coller une patrouille à un mur/une autre patrouille).
+ * Traversée : mot-pouvoir AILES juste avant un petit gouffre (x=18-21,
+ * portée du dash HÂTE insuffisante). Pas d'ennemi dans cette salle (retour
+ * de Lucas 2026-07-29 — les 2 ennemis communs qui patrouillaient ici après
+ * le gouffre sont retirés).
+ *
+ * La chambre des mots (« Le/La ___ devint ___. », narrative/world_transform.ts)
+ * qui suit a été retravaillée après un premier essai (retour de Lucas,
+ * 2026-07-27) :
+ *  - Les 3 fragments à collecter + la porte-palier qu'ils débloquaient
+ *    (`ratures_phrase_composee`) sont retirés : la chambre des mots elle-même
+ *    est le contenu de cette zone, doubler avec une collecte de fragments
+ *    faisait doublon. La Rature qui regrette est repositionnée à l'entrée de
+ *    la chambre plutôt qu'avant les fragments ; son dialogue explique
+ *    désormais le mécanisme de la porte au lieu de parler des personnages
+ *    coupés (réutilise toute la machinerie déjà construite — machine à
+ *    états, adaptation au chemin — plutôt que de la jeter).
+ *  - La porte unique de cette zone (`porte_temple`, ex-`porte_fin_ratures01`)
+ *    a désormais une règle asymétrique selon le chemin narratif : sur RATURE
+ *    elle est déjà ouverte (le pouvoir de réécrire suffit, pas besoin de
+ *    preuve) ; sur POINT FINAL/indécis il faut composer la bonne phrase aux
+ *    consoles pour l'ouvrir (`requiresFlagUnless`, nouvelle propriété Tiled
+ *    générique lue par `checkDoors`/`isDoorLocked` dans game.ts — bypasse
+ *    `requiresFlag` si ce second flag est vrai).
  *
  * Même convention que gen_room_marge01.mjs/gen_room_chapitre01.mjs (D7) :
  * géométrie décrite par des rectangles nommés, JSON compatible Tiled en sortie.
@@ -37,7 +44,7 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const W = 64;
+const W = 82;
 const H = 17;
 const TILE = 16;
 
@@ -55,10 +62,22 @@ solid(0, 0, 0, H - 1); // marge gauche
 solid(W - 1, 0, W - 1, H - 1); // marge droite : fin du contenu actuel (zones 4-6 à venir)
 solid(1, 14, W - 2, 16); // sol continu
 
-// Petit gouffre AILES (x=18-21) : inchangé depuis la première version — le
-// mot-pouvoir est désormais ajouté juste avant (x=10), ce qui le rend enfin
-// franchissable.
+// Petit gouffre AILES (x=18-21) : le mot-pouvoir est ajouté juste avant
+// (x=10), ce qui le rend franchissable.
 clear(18, 14, 21, 16);
+
+// Petit parcours de plateformes après le gouffre (retour de Lucas
+// 2026-07-29 : les PNJ-indice doivent être à des endroits différents, y
+// compris en hauteur, pas alignés au sol). Escalier à 2 marches (le premier
+// PNJ-indice attend en haut, row9) : chaque marche reste à portée d'un seul
+// saut tenu depuis la précédente (32 puis 48 px, sous le maximum d'un saut
+// simple ~57 px — pas besoin d'AILES pour grimper ici, contrairement au
+// gouffre juste avant).
+solid(24, 12, 26, 13);
+solid(29, 9, 32, 11);
+// Plateforme isolée, plus loin, pour le second PNJ-indice (row11, un seul
+// saut direct depuis le sol — hauteur différente du premier pour varier).
+solid(37, 11, 40, 13);
 
 // --- Objets (calque "objects") --------------------------------------------
 let nextId = 1;
@@ -83,78 +102,130 @@ const objects = [
   // Encrier, avant le petit gouffre : point de sauvegarde propre à cette zone.
   { id: id(), name: 'encrier_ratures', type: 'inkwell', x: 6 * TILE, y: 200, width: 16, height: 24 },
 
-  // Mot-pouvoir AILES (D16 : « migre au niveau 3 ») — juste avant le gouffre
-  // qu'il permet de franchir, même convention que les mots-pouvoir de
-  // chapitre_01.
+  // Mot-pouvoir AILES — juste avant le gouffre qu'il permet de franchir.
   {
     id: id(), name: 'mot_ales', type: 'word', x: 10 * TILE, y: 200, width: 16, height: 16,
     properties: [prop('ability', 'string', 'ales')],
   },
 
-  // Zones de patrouille des ennemis communs, après le gouffre. 2 tuiles de
-  // marge entre les deux (D16-bis) pour ne jamais coincer un ennemi.
+  // Pas d'ennemis dans ce niveau (retour de Lucas 2026-07-29) : les 2
+  // ennemis communs (Coquille, Rature) qui patrouillaient ici après le
+  // gouffre sont retirés.
+
+  // Deux PNJ-indice (retour de Lucas 2026-07-29, retravaillé une 2e fois le
+  // même jour) : sur POINT FINAL/indécis, le libre recoloriage ne suffit
+  // plus à ouvrir la porte du temple, il faut le CODE exact — obtenu en
+  // interrogeant plusieurs PNJ à différents endroits du niveau, y compris en
+  // hauteur (sur les 2 plateformes ci-dessus), plutôt qu'en essayant les 12
+  // combinaisons au hasard. Le code lui-même est passé de « soleil devient
+  // jaune » (trop évident, un fait ordinaire) à « personnage devient bleu »
+  // (data/chapters/ratures_01.json, isTempleCode). Chacun donne un indice
+  // sur une moitié du code (sujet/attribut) sans le nommer explicitement ;
+  // sur RATURE, la porte est déjà ouverte, ils le disent sans détour
+  // (`startVariants`, comme La Rature qui regrette). [proposition narration]
   {
-    id: id(), name: 'coquille_ratures', type: 'enemy', x: 24 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
-    properties: [prop('kind', 'string', 'coquille')],
+    id: id(), name: 'pnj_indice_personnage', type: 'npc', x: 30 * TILE, y: 124, width: 12, height: 20,
+    properties: [prop('dialogue', 'string', 'pnj_ratures_indice_personnage')],
   },
   {
-    id: id(), name: 'rature_ratures', type: 'enemy', x: 32 * TILE, y: 14 * TILE - 14, width: 6 * TILE, height: 14,
-    properties: [prop('kind', 'string', 'rature')],
+    id: id(), name: 'pnj_indice_bleu', type: 'npc', x: 38 * TILE, y: 156, width: 12, height: 20,
+    properties: [prop('dialogue', 'string', 'pnj_ratures_indice_bleu')],
   },
 
-  // La Rature qui regrette : un seul PNJ, après les deux zones de patrouille
-  // (tampon de 3 tuiles pour ne pas l'associer visuellement à une fuite
-  // d'ennemi).
+  // La Rature qui regrette : à l'entrée de la chambre des mots — son
+  // dialogue explique désormais la porte plutôt que de parler des
+  // personnages coupés.
   {
-    id: id(), name: 'pnj_ratures', type: 'npc', x: 41 * TILE, y: 204, width: 12, height: 20,
+    id: id(), name: 'pnj_ratures', type: 'npc', x: 44 * TILE, y: 204, width: 12, height: 20,
     properties: [prop('dialogue', 'string', 'pnj_ratures')],
   },
 
-  // 3 fragments à hauteur croissante : au sol, puis à portée d'un saut simple
-  // (~3 tuiles), puis d'un double saut AILES (~6 tuiles, comme l'ancien
-  // fragment unique) — donne un usage concret au pouvoir dans cette salle.
-  // Retour de Lucas (audit narratif 2026-07-26) : un fragment sans texte ne
-  // dit rien de ce qu'on trouve ni pourquoi. Chacun est la trace d'un
-  // personnage coupé différent (thème spec §6 : "cimetière de persos
-  // coupés"), en écho à La Rature qui regrette sans la nommer directement —
-  // elle n'est pas la seule à avoir été effacée. [TODO narration]
+  // --- Chambre des mots : "Le/La ___ devint ___." --------------------------
+  // Couleurs/attributs, puis les 2 consoles, puis les sujets/noms — ordre
+  // décrit par Lucas. Une seule combinaison ouvre la porte du temple sur
+  // POINT FINAL/indécis, désormais présentée comme LE CODE (retour de Lucas
+  // 2026-07-29) plutôt qu'un recoloriage libre à essayer — « personnage
+  // devient bleu » (isTempleCode, data/chapters/ratures_01.json +
+  // narrative/world_transform.ts), moins évident que l'ancien « soleil
+  // devient jaune » ; les autres mots restent manipulables (les
+  // pédestaux/consoles ne disparaissent pas selon la voie) mais ne sont pas
+  // le code — cohérents avec le thème du brouillon inachevé. `page`
+  // (féminin) est là pour que l'accord Le/La se voie.
   {
-    id: id(), name: 'fragment_ratures_1', type: 'fragment', x: 44 * TILE, y: 200, width: 16, height: 16,
+    id: id(), name: 'mot_jaune', type: 'transform_word', x: 48 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('role', 'string', 'attribute'), prop('wordId', 'string', 'jaune'), prop('label', 'string', 'jaune')],
+  },
+  {
+    id: id(), name: 'mot_rouge', type: 'transform_word', x: 51 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('role', 'string', 'attribute'), prop('wordId', 'string', 'rouge'), prop('label', 'string', 'rouge')],
+  },
+  {
+    id: id(), name: 'mot_bleu', type: 'transform_word', x: 54 * TILE, y: 200, width: 16, height: 16,
+    properties: [prop('role', 'string', 'attribute'), prop('wordId', 'string', 'bleu'), prop('label', 'string', 'bleu')],
+  },
+
+  // Console de validation : dépose le mot porté dans le slot correspondant
+  // à son rôle ; si les 2 slots se remplissent, résolution immédiate
+  // (game.ts, handleInteract).
+  {
+    id: id(), name: 'console_valider', type: 'console', x: 58 * TILE, y: 200, width: 16, height: 24,
+    properties: [prop('role', 'string', 'validate')],
+  },
+  // Console d'annulation : vide les 2 slots, clairement distincte et à
+  // distance de la console de validation pour ne pas les confondre.
+  {
+    id: id(), name: 'console_annuler', type: 'console', x: 62 * TILE, y: 200, width: 16, height: 24,
+    properties: [prop('role', 'string', 'cancel')],
+  },
+
+  {
+    id: id(), name: 'mot_soleil', type: 'transform_word', x: 66 * TILE, y: 200, width: 16, height: 16,
     properties: [
-      prop('flag', 'string', 'fragment_ratures_1'),
-      prop('text', 'string', "« ...elle avait un nom, une fois. Il ne reste que les guillemets où il tenait. »"),
+      prop('role', 'string', 'subject'), prop('wordId', 'string', 'soleil'),
+      prop('label', 'string', 'SOLEIL'), prop('gender', 'string', 'm'),
     ],
   },
   {
-    id: id(), name: 'fragment_ratures_2', type: 'fragment', x: 49 * TILE, y: 11 * TILE, width: 16, height: 16,
+    id: id(), name: 'mot_personnage', type: 'transform_word', x: 69 * TILE, y: 200, width: 16, height: 16,
     properties: [
-      prop('flag', 'string', 'fragment_ratures_2'),
-      prop('text', 'string', "« ...il devait sauver quelqu'un, au chapitre suivant. Le chapitre suivant n'est jamais venu. »"),
+      prop('role', 'string', 'subject'), prop('wordId', 'string', 'personnage'),
+      prop('label', 'string', 'PERSONNAGE'), prop('gender', 'string', 'm'),
     ],
   },
   {
-    id: id(), name: 'fragment_ratures_3', type: 'fragment', x: 54 * TILE, y: 8 * TILE, width: 16, height: 16,
+    id: id(), name: 'mot_ciel', type: 'transform_word', x: 72 * TILE, y: 200, width: 16, height: 16,
     properties: [
-      prop('flag', 'string', 'fragment_ratures_3'),
-      prop('text', 'string', "« ...trois brouillons de la même scène, trois fois abandonnée. Celui-ci est le seul à avoir laissé une trace. »"),
+      prop('role', 'string', 'subject'), prop('wordId', 'string', 'ciel'),
+      prop('label', 'string', 'CIEL'), prop('gender', 'string', 'm'),
+    ],
+  },
+  {
+    id: id(), name: 'mot_page', type: 'transform_word', x: 75 * TILE, y: 200, width: 16, height: 16,
+    properties: [
+      prop('role', 'string', 'subject'), prop('wordId', 'string', 'page'),
+      prop('label', 'string', 'PAGE'), prop('gender', 'string', 'f'),
     ],
   },
 
-  // Porte-palier : verrouillée tant que les 3 fragments ne sont pas ramassés
-  // et leur phrase composée (`ratures_phrase_composee`, posé dans
-  // `checkPickups`, game.ts). Boucle sur une alcôve de la même salle — pas
-  // de zone 4 à construire dans cette session, juste un point d'accroche
-  // propre pour plus tard. `showsCompletionToast` déclenche le message de
-  // fin de contenu actuel au moment du franchissement (et non plus
-  // automatiquement à la première entrée dans la salle).
+  // Porte du temple, seule porte de progression de cette zone : sur RATURE
+  // déjà ouverte (requiresFlagUnless) ; sur POINT FINAL/indécis il faut avoir
+  // composé la bonne phrase (requiresFlag). Boucle sur une alcôve de la même
+  // salle : pas de zone 4 à construire cette passe, juste un point d'accroche
+  // propre. Porte le toast de fin de contenu actuel.
+  // requiresFlag pointe vers temple_code_trouve (flag permanent posé en plus
+  // de monde_soleil_jaune, game.ts) et non monde_soleil_jaune lui-même
+  // depuis le 2026-07-28 : ce dernier peut désormais être effacé si le
+  // joueur recolorie le soleil autrement après coup, ce qui reverrouillerait
+  // la porte à tort si elle en dépendait directement.
   {
-    id: id(), name: 'porte_zone4', type: 'door', x: 59 * TILE, y: 192, width: 16, height: 32,
+    id: id(), name: 'porte_temple', type: 'door', x: 79 * TILE, y: 192, width: 16, height: 32,
     properties: [
       prop('targetRoom', 'string', 'ratures_01'),
-      prop('targetX', 'int', 62 * TILE),
+      prop('targetX', 'int', 76 * TILE),
       prop('targetY', 'int', 202),
-      prop('requiresFlag', 'string', 'ratures_phrase_composee'),
-      prop('lockedMessage', 'string', 'La page reste blanche : il faut retrouver et assembler les 3 fragments de cette zone.'), // [proposition]
+      prop('requiresFlag', 'string', 'temple_code_trouve'),
+      prop('requiresFlagUnless', 'string', 'rature_jamais'),
+      prop('lockedMessage', 'string', 'La porte du temple ne s\'ouvre pas : il manque encore la bonne phrase.'), // [proposition]
       prop('showsCompletionToast', 'boolean', true),
     ],
   },

@@ -125,16 +125,6 @@ export const BOSS = {
 /** Distance (px) à laquelle le toast d'intro du mi-boss se déclenche (audit narratif 2026-07-26). */
 export const BOSS_INTRO_RANGE = 260;
 
-/**
- * Reprendre la sauvegarde au démarrage ? `false` pendant le développement :
- * relancer le jeu repart proprement du début du chapitre (au spawn), au lieu
- * de réapparaître au dernier encrier. L'encrier reste un checkpoint en cours de
- * partie (touche R) et le système de save continue d'écrire — on rebranchera la
- * reprise via un menu « Continuer » plus tard. Typé `boolean` volontairement
- * (et non littéral) pour rester un vrai interrupteur.
- */
-export const AUTO_RESUME: boolean = false;
-
 /** Durée d'affichage des messages éphémères (secondes). */
 export const TOAST_SECONDS = 3;
 
@@ -203,6 +193,54 @@ export const BACKDROP = {
   treesTileWidth: 100,
   birdsFactor: 0.72,
   birdsTileWidth: 260,
+  /** Étoiles, uniquement dans les salles de nuit (marge_01, D-nuit 2026-07-28). */
+  starsFactor: 0.1,
+  starsTileWidth: 90,
+  /** Opacité du voile sombre qui assombrit tout le décor la nuit. */
+  nightWashAlpha: 0.55,
+} as const;
+
+/**
+ * Scène narrative "l'enfant sur la colline" (marge_01, décor de nuit,
+ * décision de Lucas 2026-07-28, revue en stickman animé le même jour après
+ * playtest) : silhouette articulée (pas un blob), animée même assise. Tant
+ * que la phrase n'a pas changé, elle regarde la lune. Dès que la phrase
+ * change, elle se lève et s'en va à pied, dans un sens ou l'autre selon la
+ * voie, pour disparaître derrière une colline (jamais d'un coup).
+ */
+export const MARGE_CHILD_SCENE = {
+  /** Durée de la marche de départ, quelle que soit la voie prise. */
+  walkSeconds: 4,
+  /** Amplitude/vitesse du balancement idle pendant que l'enfant regarde la lune. */
+  idleSwayAmplitude: 1.2,
+  idleSwayHz: 0.35,
+  /** Vitesse du cycle de marche (balancement des jambes/bras). */
+  walkCycleHz: 2.2,
+  /** Fraction finale de la marche (0 à 1) pendant laquelle la silhouette s'estompe, en plus d'être masquée par la colline. */
+  fadeOutStart: 0.8,
+} as const;
+
+/** Opacité à laquelle une couleur "devint" (chambre des mots) teinte le parchemin plutôt que de le remplacer (retour de Lucas 2026-07-28 : en couleur pleine, la page n'est plus "jolie"). */
+export const PAGE_TRANSFORM_TINT_ALPHA = 0.35;
+
+/**
+ * Scène narrative "l'enfant contre le Troll d'Encre" (arène du mi-boss,
+ * chapitre_01, décision de Lucas 2026-07-28, même principe que
+ * `MARGE_CHILD_SCENE`) : uniquement sur la voie où le décor montre cet
+ * affrontement (pas "La Marge", RATURE, décor inchangé). Dès que le vrai
+ * mi-boss est vaincu, le troll s'efface, l'enfant célèbre puis marche vers
+ * la sortie de la page (droite).
+ */
+export const CHAPITRE1_ARENA_SCENE = {
+  /** Durée de la célébration avant le départ (le troll s'efface dans le premier tiers). */
+  celebrateSeconds: 1.6,
+  /** Durée de la marche de sortie. */
+  walkSeconds: 3,
+  /** Fraction finale de la marche pendant laquelle la silhouette s'estompe. */
+  fadeOutStart: 0.8,
+  /** Vitesse du cycle de marche/combat (balancement des membres). */
+  walkCycleHz: 2.2,
+  idleSwayHz: 1.8,
 } as const;
 
 /** Particules d'encre et ambiance. */

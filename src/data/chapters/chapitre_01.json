@@ -1,14 +1,14 @@
 {
   "id": "chapitre_01",
   "title": "Le Chapitre Premier",
-  "_comment": "[proposition narration — à valider avec Lucas]. Reskin du mi-boss selon le penchant choisi en marge_01 (même boss mécanique, résolveur pur resolveBossFlavor : la variante satisfaite la plus spécifique gagne). Le nom du monstre de conte (\"le Troll d'Encre\") est une proposition ouverte, tout comme dragon/troll/orc suggérés par Lucas — à confirmer ou renommer. Audit narratif 2026-07-26 : ajout de introToast (affiché à l'approche, avant le combat) — sans lui, rien n'expliquait pourquoi CETTE créature précise barre la route ici, notamment La Marge qui réapparaît dans une salle différente de la zone qu'elle nomme.",
+  "_comment": "[proposition narration, à valider avec Lucas]. Reskin du mi-boss selon le penchant choisi en marge_01 (même boss mécanique, résolveur pur resolveBossFlavor : la variante satisfaite la plus spécifique gagne). Texte retouché le 2026-07-28 (retour de Lucas) : sur la voie POINT FINAL/indécise, le joueur est devenu l'enfant de la phrase de marge_01 (plus le mot qu'il était), et c'est cet enfant qui choisit de se battre contre le troll ; sur RATURE, la narration reste celle d'un mot qui affronte La Marge elle-même, inchangée sur le fond. Le nom du monstre de conte (\"le Troll d'Encre\") reste une proposition ouverte à confirmer ou renommer. Audit narratif 2026-07-26 : ajout de introToast (affiché à l'approche, avant le combat), sans lui rien n'expliquait pourquoi CETTE créature précise barre la route ici, notamment La Marge qui réapparaît dans une salle différente de la zone qu'elle nomme.",
   "bossFlavorVariants": [
     {
       "when": {},
       "name": "le Troll d'Encre",
       "label": "T",
-      "introToast": "Le livre s'invente un obstacle à ta mesure : une créature de conte se dresse sur ta route.",
-      "defeatToast": "Le Troll d'Encre est vaincu.",
+      "introToast": "Tu es devenu l'enfant de l'histoire, et il a décidé de se battre. Un troll d'encre se dresse sur sa route.",
+      "defeatToast": "L'enfant a vaincu le Troll d'Encre.",
       "decor": "creature"
     },
     {

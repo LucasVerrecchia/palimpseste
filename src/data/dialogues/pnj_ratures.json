@@ -5,21 +5,21 @@
     { "when": { "rature_jamais": true }, "start": "rature_intro" },
     { "when": { "nom_ecrit": true }, "start": "point_intro" }
   ],
-  "_comment": "[proposition narration — à valider avec Lucas]. Un seul PNJ, une seule histoire (pas de personnage-miroir contradictoire, retour explicite de Lucas) : La Rature qui regrette, un personnage rayé d'un vieux brouillon qui hante la marge entre les pages. Elle ne pousse vers aucune fin : son introduction et sa réaction changent selon le choix déjà fait dans La Marge (rature_jamais / nom_ecrit), mais le cœur de son histoire (le nœud *_histoire, texte identique dans les 3 branches) ne varie jamais.",
+  "_comment": "[proposition narration, à valider avec Lucas]. La Rature qui regrette change de rôle (retour de Lucas, 2026-07-27) : les 3 fragments de personnages coupés sont retirés (faisaient doublon avec la chambre des mots elle-même) et le PNJ est repositionné à l'entrée de cette chambre. Son dialogue explique désormais explicitement le mécanisme de la porte du temple (porter un mot jusqu'à la console qui valide) au lieu de parler des personnages coupés, retour explicite : « il faut que ce soit explicitement expliqué sinon le joueur ne va pas comprendre ». Garde son identité (rayée d'un vieux brouillon) et reste adaptative selon rature_jamais/nom_ecrit (narrative/dialogue.ts, startVariants) : sur RATURE la porte est déjà ouverte (juste expliqué comme un bonus optionnel) ; sur POINT FINAL/indécis, trouver la bonne phrase est nécessaire pour l'ouvrir (requiresFlag/requiresFlagUnless, game.ts). 2026-07-29 : elle ne donne plus le début de la phrase elle-même (« Le Soleil devint... », trop direct, et périmé depuis que le code est passé à « personnage »/« bleu ») — elle renvoie maintenant vers les 2 nouveaux PNJ-indice disséminés dans le niveau (pnj_ratures_indice_personnage.json/pnj_ratures_indice_bleu.json), qui portent chacun une moitié du code.",
   "nodes": {
     "rature_intro": {
       "speaker": "La Rature qui regrette",
-      "text": "Tiens. Une autre main qui efface. Je reconnais ce geste : on m'a rayée d'un brouillon, il y a longtemps.",
-      "next": "rature_histoire"
+      "text": "Tiens. Toi qui as déjà rayé un mot pour t'en sortir. La porte, devant toi, te reconnaît déjà : elle s'ouvrira sans qu'on te demande rien.",
+      "next": "rature_mecanisme"
     },
-    "rature_histoire": {
+    "rature_mecanisme": {
       "speaker": "La Rature qui regrette",
-      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "text": "Mais si tu veux voir ce que ton pouvoir peut vraiment faire : porte un mot de chaque côté jusqu'à la console qui valide, et regarde. Choisis n'importe quel couple. Ce que tu écris juste... devient vrai.",
       "next": "rature_reaction"
     },
     "rature_reaction": {
       "speaker": "La Rature qui regrette",
-      "text": "Tu as pris la même sortie que la mienne. Je ne sais toujours pas si c'est une libération ou juste un vide de plus. Va, et si tu le sais un jour, reviens me le dire.",
+      "text": "Moi, je n'ai plus ce droit-là. On m'a rayée avant que j'apprenne à m'en servir. Va, et laisse une trace qui tienne, pour une fois.",
       "effects": [
         { "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true },
         { "type": "set_leaning", "delta": -0.5 }
@@ -27,17 +27,17 @@
     },
     "point_intro": {
       "speaker": "La Rature qui regrette",
-      "text": "Tiens. Une main qui écrit, pour une fois. On en voit peu, par ici.",
-      "next": "point_histoire"
+      "text": "Tiens. Toi qui vas jusqu'au bout de la phrase. La porte du temple ne s'ouvrira pas pour rien : il faut lui donner la bonne phrase, exactement.",
+      "next": "point_mecanisme"
     },
-    "point_histoire": {
+    "point_mecanisme": {
       "speaker": "La Rature qui regrette",
-      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "text": "Là-bas, des mots attendent d'être portés jusqu'à la console qui valide : un sujet d'un côté, ce qu'il devient de l'autre. Trouve la phrase qui est déjà vraie, et la porte s'ouvrira.",
       "next": "point_reaction"
     },
     "point_reaction": {
       "speaker": "La Rature qui regrette",
-      "text": "Toi, tu vas jusqu'au bout de la phrase. Je ne saurai jamais ce que ça fait d'être finie plutôt qu'annulée. Va vite, avant que quelqu'un change encore d'avis.",
+      "text": "Moi, je n'ai jamais fini ma phrase. Toi, tu peux encore. D'autres, dispersés dans ces pages, se souviennent de bouts de la mienne. Écoute-les.",
       "effects": [
         { "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true },
         { "type": "set_leaning", "delta": 0.5 }
@@ -45,17 +45,17 @@
     },
     "doute_intro": {
       "speaker": "La Rature qui regrette",
-      "text": "Tiens. Une main qui hésite encore. Je me souviens de cette hésitation-là.",
-      "next": "doute_histoire"
+      "text": "Tiens. Une main qui hésite encore, devant cette porte. Je comprends : moi non plus, je n'ai jamais su de quel côté j'étais.",
+      "next": "doute_mecanisme"
     },
-    "doute_histoire": {
+    "doute_mecanisme": {
       "speaker": "La Rature qui regrette",
-      "text": "J'étais un personnage, avant. Une phrase entière me contenait. Puis l'Auteur a changé d'avis, et il ne reste de moi que ce trait noir.",
+      "text": "Tant que tu hésites, la porte du temple attend une preuve : porte les mots qui sont là-bas jusqu'à la console qui valide, un sujet d'un côté, ce qu'il devient de l'autre, jusqu'à trouver la phrase qui est déjà vraie.",
       "next": "doute_choix"
     },
     "doute_choix": {
       "speaker": "La Rature qui regrette",
-      "text": "On m'a rayée avant que je choisisse quoi que ce soit. Toi, tu as encore les deux routes ouvertes. Laquelle t'appelle, au fond ?",
+      "text": "Et pendant que tu y es... laquelle des deux routes t'appelle, au fond ?",
       "choices": [
         {
           "text": "Disparaître, comme toi.",
@@ -85,7 +85,7 @@
     },
     "doute_fin_neutre": {
       "speaker": "La Rature qui regrette",
-      "text": "Les brouillons ont le droit d'hésiter encore. Reviens me lire, si tu changes d'avis.",
+      "text": "Les brouillons ont le droit d'hésiter encore. La porte aussi, apparemment.",
       "effects": [{ "type": "set_flag", "flag": "pnj_ratures_rencontre", "value": true }]
     }
   }

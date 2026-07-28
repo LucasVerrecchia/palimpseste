@@ -11,7 +11,8 @@ export interface GameEvents extends Record<string, unknown> {
   npc_talked: { npcId: string };
   flag_set: { flag: string; value: boolean | number };
   room_entered: { roomId: string };
-  game_saved: { roomId: string };
+  /** `reason` distingue le contexte pour le toast affiché (wireToasts, game.ts). */
+  game_saved: { roomId: string; reason: 'inkwell' | 'door' | 'manual' | 'auto' };
   ink_reclaimed: { amount: number };
   player_respawned: { x: number; y: number };
   /** Un mot-loi a été raturé (déviation vers RATURE). */

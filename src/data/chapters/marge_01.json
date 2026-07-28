@@ -1,27 +1,19 @@
 {
   "id": "marge_01",
   "title": "Chapitre premier : La Marge",
-  "_comment": "Phrase-loi recomposée selon les choix (D11). [proposition narration — à valider avec Lucas]. Chaque variante est une phrase ENTIÈRE et cohérente, choisie d'après les flags posés en jeu (résolveur pur resolveSentence : la variante satisfaite la plus spécifique gagne). Écrire dans le blanc ▢ transforme le sujet impersonnel « Le mot » en « Tu » ; raturer « jamais » inverse la fatalité.",
+  "_comment": "Phrase-loi recomposée selon les choix (D11), refondue le 2026-07-28, texte RATURE ajusté le 2026-07-28 (retour de Lucas) [proposition narration, à valider avec Lucas]. La phrase de base est « Un enfant qui avait soif d'aventure », laissée ouverte (« … ») tant qu'aucun choix n'est fait. Raturer « enfant » (mot_enfant, canon barrier) → rature_jamais → le sujet change : ce n'était plus un enfant fixé dans une histoire, mais un mot libre. Dessiner le point final (blanc_point, canon latent) → nom_ecrit → la phrase se ferme telle quelle, l'histoire continue. Les deux flags restent nommés rature_jamais/nom_ecrit (inchangés depuis l'ancien design) : ils sont lus par de nombreux autres systèmes (resolveLeaning, boss_flavor, world_transform, pnj_ratures), seul le mot/geste qui les pose a changé.",
   "sentenceVariants": [
     {
       "when": {},
-      "text": "Le mot resta enfermé dans la marge, et n'en sortit jamais."
+      "text": "Un enfant qui avait soif d'aventure…"
     },
     {
-      "when": { "efface_enferme": true },
-      "text": "Le mot resta dans la marge, et n'en sortit jamais."
+      "when": { "nom_ecrit": true },
+      "text": "Un enfant qui avait soif d'aventure."
     },
     {
-      "when": { "efface_enferme": true, "rature_jamais": true },
-      "text": "Le mot resta dans la marge, et pourtant, il s'en échappa."
-    },
-    {
-      "when": { "efface_enferme": true, "nom_ecrit": true },
-      "text": "Tu étais ce mot. Et tu achevas enfin la phrase."
-    },
-    {
-      "when": { "efface_enferme": true, "nom_ecrit": true, "rature_jamais": true },
-      "text": "Tu étais ce mot, et plus aucun « jamais » ne te retenait."
+      "when": { "rature_jamais": true },
+      "text": "Un mot qui avait soif de liberté."
     }
   ]
 }
