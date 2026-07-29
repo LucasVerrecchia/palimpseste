@@ -504,16 +504,17 @@ danger #C1362B, non-écrit #CFE3E8.
     avant toute réécriture de texte (règle du projet : narration décidée
     avec Lucas).
 - Phase 2 : machinerie de pouvoirs/filigrane/ennemis/mi-boss + DA de fond +
-  zone 3 (PNJ adaptatif, désormais finalisée) + clarté des 2 voies + reskin
-  du mi-boss + bugs de playtest terminées et corrigées. **Manquant pour la
-  conformité au brief** : zones 4-6 (spec en prévoit 5 + climax, 3 salles
-  construites), `endings.ts`/`resolveEnding` + salle climax "La Page
-  Blanche" + pouvoir POINT (2 fins obligatoires — `endingLeaning` déjà
-  nourri par les mots-loi et le dialogue). Note : la spec dérive déjà de
-  l'implémentation réelle sur plusieurs points (ANCRE supprimé, BRÈCHE/HÂTE
-  enseignés en zone 2 au lieu des zones 3/5 prévues) — à clarifier avec
-  Lucas avant de construire ces zones plutôt que suivre la spec au pied de
-  la lettre.
+  zone 3 (PNJ adaptatif, désormais finalisée) + zone 4 (liquide montant,
+  round 28) + clarté des 2 voies + reskin du mi-boss + bugs de playtest
+  terminées et corrigées. **Manquant pour la conformité au brief** : zones
+  5-6 (spec en prévoit 5 + climax, 4 salles construites),
+  `endings.ts`/`resolveEnding` + salle climax "La Page Blanche" + pouvoir
+  POINT (2 fins obligatoires — `endingLeaning` déjà nourri par les mots-loi
+  et le dialogue). Note : la spec dérive déjà de l'implémentation réelle sur
+  plusieurs points (ANCRE supprimé, BRÈCHE/HÂTE enseignés en zone 2 au lieu
+  des zones 3/5 prévues, zone 4 devenue un liquide montant plutôt que
+  L'Annotation) — à clarifier avec Lucas avant de construire ces zones
+  plutôt que suivre la spec au pied de la lettre.
 - **Seizième round (2026-07-27) — la chambre des mots (« Le/La ___ devint
   ___. »)** : réponse à la demande de Lucas de rendre concret le pouvoir de
   RATURE sur le monde. Idée initiale : une salle réservée au chemin RATURE
@@ -1307,3 +1308,770 @@ danger #C1362B, non-écrit #CFE3E8.
     références de dialogue). Le contenu des indices eux-mêmes (personnage
     via l'agentivité, bleu via l'eau/le crépuscule) reste `[proposition]`,
     à valider par Lucas en jouant.
+- **Vingt-huitième round (2026-07-29) — zone 4 « La Crue » (liquide montant)** :
+  reprise du projet après une pause. Idée de Lucas pour le niveau suivant : une
+  salle où un liquide monte en continu et où le joueur doit grimper plus vite
+  qu'il ne monte, en se traçant ses propres plateformes d'encre ; sur POINT
+  FINAL/indécis, le TEMPLE inonde son puits pour piéger le visiteur ; sur
+  RATURE, le LIVRE déverse son encre pour ravaler le mot qui s'échappe ; des
+  plateformes non tracées par le joueur, à mi-parcours, pour reprendre son
+  souffle et de l'encre ; verticalité à exploiter. Aucun nouveau pouvoir requis
+  (ANCRE a été retiré, PLUME/BRÈCHE/HÂTE/AILES suffisent, tous déjà acquis à ce
+  stade). Pas d'ennemi (même choix que ratures_01) : la tension vient
+  uniquement de la course, pas du combat.
+  - Nouveau module pur `game/world/rising_hazard.ts` (`advanceHazard` — la
+    surface décroît en Y, càd monte, plafonnée à `minY` ; `isCaughtByHazard` —
+    contact dès que les pieds atteignent la surface), testé. Même mécanique et
+    même vitesse sur les deux chemins narratifs ; seule sa peau change via un
+    nouveau `game/narrative/hazard_flavor.ts` (`resolveHazardFlavor`, testé,
+    même principe que `resolveBossFlavor` : la variante la plus spécifique
+    dont les `when` correspondent aux flags l'emporte) — couleur (`ink` pour
+    RATURE, `unwritten` pour POINT FINAL/indécis, aucune couleur inventée),
+    texte d'arrivée et message de capture. Données dans
+    `data/chapters/crue_01.json` (`hazardFlavorVariants`, textes
+    `[proposition]`).
+  - `config.ts` : nouveau groupe `RISING_HAZARD` (vitesse de montée, marge de
+    sécurité au retour à l'encrier, amplitude/fréquence de l'ondulation de
+    surface) — vitesse volontairement modeste pour un premier passage, comme
+    toujours pour ce qui touche au tracé d'encre (non scriptable, donc pas
+    testable automatiquement ; à resserrer après le playtest de Lucas).
+  - `tools/gen_room_crue01.mjs` (nouveau) → `data/rooms/crue_01.json` : puits
+    vertical de 14×50 tuiles, volontairement VIDE entre un sol d'entrée (avec
+    encrier) et une plateforme de repos à mi-hauteur (avec un second encrier,
+    demande explicite de Lucas), puis vide à nouveau jusqu'à une plateforme
+    du haut portant la porte de sortie. Aucune géométrie de secours
+    pré-posée : tout le reste du parcours est laissé au tracé du joueur,
+    conforme à la mécanique décrite. `tools/gen_room_ratures01.mjs` : la
+    porte du temple (déjà asymétrique RATURE/POINT FINAL depuis le round 17)
+    mène désormais à `crue_01` au lieu de boucler sur elle-même — la zone 4
+    existe maintenant. Le toast de fin de contenu actuel (`showsCompletionToast`)
+    est déplacé de cette porte vers la sortie de `crue_01` ; renommé au passage
+    en `finalizeAvailableContent()`/flag `content_fin_actuelle` (depuis
+    `finalizeRatures01Content()`/`ratures01_fini`, spécifiques à ratures_01 et
+    donc trompeurs maintenant que le contenu continue une zone de plus) —
+    `flags.json` mis à jour en conséquence.
+  - `game.ts` : `hazardY` (Y monde de la surface, `null` hors de crue_01) mis
+    à niveau sous le point de départ à `loadRoom` et remis à niveau sous le
+    joueur à chaque retour à l'encrier (`respawn`), avec la même formule
+    (checkpoint + hauteur du joueur + marge) — un encrier mi-parcours redonne
+    donc un vrai répit, pas seulement de l'encre. Capture gérée comme les
+    autres échecs (`handleHazardCaught` → `failAndRespawn`, même sévérité
+    qu'une chute dans un gouffre ou une défaite), vérifiée AVANT la chute
+    dans `updatePlaying`. Rendu (`renderHazard`) : dalle translucide + ligne
+    de surface ondulée en continu (`this.time`, pas un zigzag figé comme
+    `renderCrack` — un liquide bouge sans cesse).
+  - **Bug latent trouvé en vérifiant** (indépendant de cette fonctionnalité,
+    mais qui en aurait faussé la démonstration) : le menu Admin
+    (`adminGoToRoom`) écrasait `this.mode` en `'playing'` sans condition
+    juste après `loadRoom`, ce qui sautait silencieusement toute narration de
+    première visite déclenchée par ce chargement (existait déjà pour
+    ratures_01, pas seulement pour la nouvelle salle) — corrigé : ne repasse
+    en `'playing'` que si `loadRoom` n'a pas mis le jeu en mode `'narration'`.
+  - 210 tests (+22 : `rising_hazard.test.ts`, `hazard_flavor.test.ts`,
+    nouveau bloc `crue_01` dans `tilemap.test.ts`, ajustement du test de la
+    porte du temple), `tsc`/`eslint`/`vite build` verts. Vérifié en Chromium
+    headless (serveur isolé port 5192, Playwright réinstallé temporairement
+    `--no-save` puis désinstallé, `package.json`/`package-lock.json`
+    vérifiés inchangés), entièrement au clavier (menu Admin, pas de tracé à
+    la souris nécessaire pour atteindre l'entrée de la salle) : narration
+    d'arrivée confirmée (texte du temple, révélation progressive), liquide
+    visible et montant confirmé sur deux captures espacées, joueur immobile
+    rattrapé par la surface confirmé (toast thématique « Les eaux du temple
+    se referment sur toi... » puis retour à l'encrier, surface remise à un
+    niveau sûr en dessous). **Non vérifié en direct** (nécessiterait de se
+    tracer des plateformes d'encre pour grimper, tracé à la souris non
+    scriptable comme toujours) : grimper réellement jusqu'à la plateforme de
+    repos et jusqu'à la porte de sortie, et la peau RATURE (encre noire) du
+    liquide — cette dernière est cependant couverte exhaustivement par les
+    tests unitaires de `resolveHazardFlavor` et repose sur le même ternaire
+    déjà vérifié visuellement pour la couleur par défaut. À confirmer par
+    Lucas en jouant, notamment l'équilibrage vitesse de montée/coût d'encre
+    (numéros posés comme un premier passage raisonnable, pas calibrés en jeu
+    réel).
+- **Vingt-neuvième round (2026-07-29) — retours de playtest sur les niveaux
+  2, 3 et 4** : Lucas rejoue et remonte plusieurs points, dont une capture
+  d'écran du niveau 4 qui a permis de retrouver un vrai bug indépendant.
+  - **Bug trouvé en creusant la capture d'écran de Lucas (niveau 4, joueur
+    bloqué avec l'étiquette « CIEL » flottant au-dessus de lui)** : `CIEL`
+    est un mot de la chambre des mots de `ratures_01` (`transform_word`,
+    porté à la main) — `carriedWord`/`transformSlots` n'étaient réinitialisés
+    qu'à `beginGame` (nouvelle partie/chargement), jamais à `loadRoom`
+    (chaque changement de salle). Un mot ramassé puis jamais déposé restait
+    donc "en main" indéfiniment, y compris en changeant de salle (porte ou
+    Admin), affiché au-dessus de la tête du joueur n'importe où dans le jeu
+    (`renderCarriedWord`) — sans aucun sens hors de la chambre des mots.
+    Corrigé : `loadRoom` remet les deux à `null`/vide à chaque chargement.
+  - **Niveau 2 (chapitre_01), exploit trouvé en creusant le retour de
+    Lucas** (« la barre brèche horizontale devrait continuer jusqu'à la
+    fin ») : le second point faible de l'arène (plafond horizontal,
+    `GAUNTLET_SPLIT_ROW`, x=57-67) ne faisait qu'UNE rangée d'épaisseur, sans
+    rien au-dessus jusqu'au vrai plafond de la salle. Un joueur grimpant déjà
+    plus haut que cette rangée AVANT d'atteindre le mur 1 (possible dans le
+    puits d'escalade, x≥34, aucun plafond avant x=56) pouvait ensuite voler
+    par-dessus tout le mur 2 sans jamais chercher son point faible — la
+    "chasse au plafond" pensée en round précédent ne servait plus à rien.
+    Corrigé (`tools/gen_room_chapitre01.mjs`) : un vrai plafond (rangées 0 à
+    `GAUNTLET_SPLIT_ROW - 1`) bloque désormais tout l'espace au-dessus, du
+    mur 1 jusqu'à la fin du plafond horizontal — impossible de contourner
+    par le haut, sans toucher à la verticalité de l'arène du mi-boss plus
+    loin (le plafond ajouté s'arrête à `GAUNTLET_WALL2_X1`). Nouveau test de
+    régression (`tilemap.test.ts`) qui vérifie directement cette zone sur
+    les données réelles.
+  - **Niveau 3 (ratures_01), PNJ-indice repositionnés** (retour de Lucas :
+    « il faudrait que le personnage soit obligé de construire des
+    plateformes pour atteindre certains pnj ») : l'escalier de 2 marches à
+    portée d'un simple saut tenu (round précédent) est retiré ;
+    les 2 PNJ-indice sont maintenant sur des plateformes dont la hauteur
+    au-dessus du sol (144px et 176px) dépasse nettement le maximum
+    atteignable sans encre (saut ~57px + AILES ~47px ≈ 105px) — impossible
+    de les atteindre sans peindre au moins un palier intermédiaire. Nouveaux
+    tests de régression (hauteur, absence de tuile solide entre le sol et
+    chaque plateforme).
+  - **Niveau 3, code du temple clarifié et changé** (retour de Lucas,
+    résumé explicite après un aller-retour manqué la session précédente) :
+    « Le Ciel devint rouge » remplace « Le Personnage devint bleu » (encore
+    jugé trop devinable). `isTempleCode` déplacé dans
+    `data/chapters/ratures_01.json` (donnée, pas de code touché dans
+    `game.ts` — la porte reste gérée par `temple_code_trouve`, déjà
+    generic). Les 2 PNJ-indice renommés/réécrits en conséquence
+    (`pnj_ratures_indice_ciel.json`/`pnj_ratures_indice_rouge.json`,
+    remplacent `_personnage`/`_bleu`, indices obliques par élimination pour
+    le sujet, par imagerie de chaleur/aube pour l'attribut).
+  - **Niveau 3, un seul PNJ sur la voie RATURE** (retour de Lucas : « un
+    seul pnj dans cette version ») : nouvelle propriété Tiled générique
+    `hiddenIfFlag`, lue par un nouveau `Game.isNpcHidden` (appliqué à la
+    fois au rendu et à l'interaction, contrairement aux portes
+    `requiresFlag` qui restent visibles mais verrouillées — un PNJ caché
+    n'a pas de version "verrouillée visible" qui aurait un sens). Les 2
+    PNJ-indice portent `hiddenIfFlag: 'rature_jamais'` : sur RATURE, seule
+    La Rature qui regrette reste rencontrable, ses indices n'ayant plus
+    d'utilité une fois la porte déjà ouverte.
+  - **Niveau 4 (crue_01), softlock corrigé** : la capture d'écran de Lucas
+    montrait le joueur bloqué sous la plateforme de l'encrier de
+    mi-parcours. Cause : les 2 plateformes de repos étaient pleines sur
+    TOUTE la largeur navigable du puits (colonnes 1 à W-2, les murs
+    latéraux occupant déjà les 2 colonnes restantes) — aucune ouverture
+    nulle part, impossible d'atteindre leur surface par en dessous quel que
+    soit le niveau de maîtrise du tracé d'encre. Corrigé en suivant la
+    suggestion de Lucas (« rajouter des murs breche à casser ») : une bande
+    de 3 colonnes de chaque plateforme (côté opposé pour varier) est
+    désormais enregistrée `breche_wall`, cassable au pouvoir BRÈCHE (déjà
+    acquis) — le reste de chaque plateforme reste un sol ordinaire, jamais
+    cassable, pour garder l'encrier/la porte/le robinet sur une assise
+    stable. Nouveaux tests de régression (présence des 2 murs, largeur
+    partielle, casser l'un n'affecte pas l'autre — `Room.revealFiligrane`).
+  - **Niveau 4, ajustements de la mécanique d'eau** (3 retours de Lucas) :
+    (1) eau plus foncée : opacité de la dalle/ligne de surface remontée de
+    0.4/0.8 (en dur) à 0.58/0.9 (`RISING_HAZARD.fillAlpha`/`strokeAlpha`,
+    config.ts) ; (2) condition de capture assouplie : rattrapé à MOITIÉ
+    submergé (centre du corps) plutôt qu'au premier pixel touché (pieds),
+    jugé "très expéditif" — `isCaughtByHazard` (rising_hazard.ts) généralisé
+    pour accepter n'importe quel point de référence, `game.ts` lui passe
+    désormais le centre du joueur ; (3) robinet/bouton en haut du puits pour
+    arrêter la montée pour de bon (nouveau type d'objet `valve`, flag fixe
+    `CRUE01_VALVE_FLAG`, lu par `updateHazard` pour geler `hazardY`) —
+    reskinné selon le chemin (`valveLabel`/`stopMessage`,
+    `narrative/hazard_flavor.ts` : "le robinet"/temple vs "le fermoir"/livre)
+    mais n'importe pas sur la porte de sortie (flourish de clôture, pas une
+    condition — hypothèse posée faute de précision de Lucas sur ce point,
+    à corriger si ce n'est pas ce qu'il voulait).
+  - 219 tests (+6 : régression plafond chapitre_01, plateformes/hauteur
+    ratures_01, murs BRÈCHE crue_01 ×2, isTempleCode mis à jour), `tsc`/
+    `eslint`/`vite build` verts. Vérifié en Chromium headless (serveur
+    isolé port 5193, Playwright réinstallé temporairement `--no-save` puis
+    désinstallé, `package.json`/`package-lock.json` vérifiés inchangés) :
+    chapitre_01 charge sans régression visible au spawn ; crue_01 confirmé
+    avec une eau visiblement plus sombre et la capture qui se déclenche
+    toujours correctement (bon message reskinné, retour à l'encrier, remise
+    à niveau de la surface). **Non vérifié en direct** (nécessiterait de
+    grimper avec des plateformes d'encre pour atteindre les zones
+    concernées, tracé à la souris non scriptable comme toujours) : les
+    PNJ-indice repositionnés de `ratures_01` (déjà couverts par des tests
+    unitaires sur la géométrie réelle), les nouveaux murs BRÈCHE des
+    plateformes de `crue_01` en situation réelle, et le robinet/fermoir en
+    haut du puits. À confirmer par Lucas en jouant, en particulier si le
+    robinet devrait ou non conditionner la porte de sortie (hypothèse prise
+    sans confirmation explicite).
+- **Trentième round (2026-07-29) — Lucas corrige le round précédent et
+  demande une évolution du niveau 4** :
+  - **Niveau 2, correctif du round précédent annulé et refait correctement**
+    (Lucas : « tu t'es trompé, tu as mis un mur en hauteur plein on ne peut
+    plus passer, je parlais juste du second mur horizontal, c'est lui qui
+    devrait être sur toute la longueur, pas la hauteur ») : le plafond en
+    HAUTEUR ajouté au round précédent (rangées 0 à `GAUNTLET_SPLIT_ROW-1`,
+    x=57-67) bloquait bel et bien tout passage, y compris par en dessous —
+    casser le point faible n'ouvrait plus qu'une poche d'un tuile de haut,
+    coincée sous ce nouveau plafond, sans nulle part où aller. Entièrement
+    retiré. Correctif refait tel que demandé : seule la LONGUEUR du plafond
+    horizontal change (x=57 à W-2 au lieu de x=57 à 67, point faible
+    repoussé tout au bout) — aucune contrainte de hauteur ajoutée, le
+    passage normal par en dessous reste possible comme avant. Test de
+    régression de l'ancien correctif retiré, remplacé par un test qui
+    vérifie la nouvelle longueur.
+  - **Niveau 4, plus de porte de sortie** (Lucas : « il faudrait pas mettre
+    une porte en haut mais pouvoir continuer le niveau, comme si qu'on
+    arrivait au cœur du temple ») : `porte_suite` supprimée. Le robinet/
+    fermoir en haut du puits devient LE point d'arrivée de la salle — en
+    plus d'arrêter la montée, il déclenche désormais aussi
+    `finalizeAvailableContent()` (déplacé depuis l'ancienne porte). Les
+    textes de clôture (`stopMessage`, `hazard_flavor.ts`) explicitent
+    l'arrivée : « Te voilà au cœur du temple »/« Te voilà au cœur du
+    livre ». **Hypothèse posée sans confirmation explicite** : le robinet
+    reste un geste de clôture, pas une condition (de toute façon plus de
+    porte à débloquer) — à confirmer que c'est bien ce que Lucas voulait
+    dire par "continuer le niveau".
+  - **Niveau 4, décor mural** (demande de Lucas : hiéroglyphes, silhouettes
+    égyptiennes, torches, symboles) : nouveau `renderCrueWallDecor`
+    (game.ts), motifs répétés verticalement sur les deux parois du puits,
+    tuilage vertical réutilisant `engine/parallax.ts`
+    (`tileIndicesCovering`/`seededRandom`, déjà utilisés horizontalement
+    pour le fond des autres salles — génériques par construction, aucun
+    changement moteur). Reskinné selon le chemin narratif (même `color` que
+    le liquide, `hazard_flavor.ts`) : POINT FINAL/indécis → ankh, silhouette
+    de profil, hiéroglyphe de l'eau, torches ; RATURE → tache d'encre,
+    plume, ligne d'écriture. Défilement complet (facteur 1, pas de
+    parallaxe, même raison que `renderBossArenaDecor` round 27 : la
+    parallaxe dérive dans les salles hautes). Deux torches fixes encadrent
+    le robinet (marque l'arrivée, indépendant du tuilage aléatoire).
+    **Bug trouvé en vérifiant visuellement** (pas dans les retours de
+    Lucas) : le décor était dessiné AVANT `renderSlabs` (les dalles de mur)
+    dans le pipeline de rendu — les dalles, peintes juste après,
+    recouvraient entièrement les motifs, invisibles à l'écran. Corrigé en
+    déplaçant l'appel après `renderSlabs`.
+  - **Niveau 4, tourelles fixes** (Lucas : « comme le boss au niveau 2 ») :
+    nouveau module pur `game/enemies/turret.ts` (même pattern que
+    `enemy.ts`/`boss_coquille_majuscule.ts`, D12 — types + fonctions pures,
+    pas d'ECS générique), testé (15 tests). Encastrées dans les murs
+    latéraux, ne se déplacent jamais, tirent une bulle visée sur le joueur
+    à intervalle régulier (même anticipation `projectileLeadSeconds` que le
+    mi-boss) ; détruites en un seul coup de HÂTE (rôle "combat" du dash,
+    spec §6, cohérent avec les ennemis communs) ; **aucun dégât de contact**
+    (choix de scope délibéré : fixes dans le mur, seul le tir menace,
+    contrairement à Coquille/Rature qui blessent au toucher). 4 tourelles
+    placées dans `crue_01` (`tools/gen_room_crue01.mjs`), 2 par moitié du
+    puits, alternant de côté (gauche/droite) pour varier. `config.ts` :
+    nouveau groupe `TURRET` (vitesse/rayon/dégâts de projectile proches de
+    `BOSS` par cohérence, cooldown un peu plus court — pas de phases
+    télégraphiées ici, juste un délai). Rendu : socle + lentille qui
+    s'éclaire juste avant le tir (télégraphe minimal réutilisant le
+    `cooldown` déjà connu, pas de nouvel état) ; bulles dans le même style
+    que celles du mi-boss (halo + cœur + reflet, code dupliqué à
+    l'identique faute d'un module de projectile partagé — voir limite
+    ci-dessous).
+  - **Dette technique notée, pas corrigée cette passe** : le rendu des
+    bulles (mi-boss ET tourelles) et une partie de la logique de
+    projectile (avance, expiration, visée avec anticipation) sont
+    dupliqués entre `boss_coquille_majuscule.ts`/`turret.ts` et leurs blocs
+    de rendu dans `game.ts`. Un module `enemies/projectile.ts` partagé
+    factoriserait ça proprement ; pas fait ici pour limiter le risque de
+    régression sur le mi-boss (déjà éprouvé) dans une passe déjà chargée —
+    à envisager si un 3e émetteur de projectiles apparaît.
+  - 228 tests (+15 turret.test.ts, quelques tests de crue_01 fusionnés/
+    renommés en retirant les références à la porte disparue), `tsc`/
+    `eslint`/`vite build` verts.
+    Vérifié en Chromium headless (serveur isolé port 5194, Playwright
+    réinstallé temporairement `--no-save` puis désinstallé,
+    `package.json`/`package-lock.json` vérifiés inchangés) : chapitre_01
+    charge sans régression visible au spawn ; crue_01 confirmé avec le
+    décor mural bien visible après correction du bug d'ordre de rendu
+    (hiéroglyphes ondulés, silhouette de profil, torche) et une tourelle
+    clairement visible encastrée dans le mur gauche près du spawn. **Non
+    vérifié en direct** (nécessiterait de grimper avec des plateformes
+    d'encre, tracé à la souris non scriptable comme toujours) : combattre
+    réellement une tourelle (destruction au dash, dégâts de ses bulles),
+    atteindre le robinet en haut et confirmer le texte de clôture, et le
+    décor mural version RATURE (encre/plume) — cette dernière repose sur le
+    même ternaire que la couleur du liquide, déjà vérifié visuellement pour
+    la variante par défaut. À confirmer par Lucas en jouant, notamment
+    l'équilibrage des tourelles (dégâts/cadence) et si le geste du robinet
+    correspond à ce qu'il avait en tête pour "continuer le niveau".
+- **Trente-et-unième round (2026-07-29)** — retours de playtest sur les
+  niveaux 3 et 4, plus une image du haut du puits de crue_01 :
+  - **Bug corrigé (niveau 3, chambre des mots)** : composer n'importe quelle
+    phrase valide (une des 12 combinaisons) affichait à tort « la porte
+    s'ouvre » sur POINT FINAL/indécis, même quand ce n'était pas le code du
+    temple (`ciel`+`rouge`) — la porte restait en réalité verrouillée
+    (`temple_code_trouve` non posé), mais le texte affirmait le contraire.
+    `resolveTransformAttempt` (game.ts) distingue désormais 3 cas : RATURE
+    (« devenu vrai », inchangé), POINT FINAL/indécis + bon code (« la porte
+    s'ouvre », inchangé), POINT FINAL/indécis + combinaison valide mais pas
+    le code (nouveau : « Une phrase vraie, mais pas celle que la porte
+    attend. » [proposition]). Vérifié en direct : soleil+rouge puis ciel+jaune
+    (deux combinaisons valides mais pas le code) affichent bien le nouveau
+    message plutôt que l'ancien texte trompeur.
+  - **Tourelles (crue_01) retravaillées** (retour de Lucas : « un peu moins
+    souvent » + « uniquement quand le personnage arrive à une certaine
+    portée ») : `TURRET.cooldownSeconds` remonté 2.2→3.4 ; nouveau
+    `TURRET.rangeDistance` (130px) et `stepTurret` (`enemies/turret.ts`) gèle
+    désormais le décompte du cooldown tant que le joueur est hors de cette
+    portée (ni tir, ni décompte — entrer dans la portée reprend le compte à
+    rebours normalement, pas de tir instantané garanti à l'entrée). 2
+    nouveaux tests de régression (gelée hors de portée, tire dès l'entrée en
+    portée) ; les tests existants (turret proche de x=50, joueur à x=300)
+    ont dû être rapprochés (x=100) pour continuer à tester le tir/la visée
+    indépendamment du nouveau filtre — sinon ils échouaient tous, masqués
+    l'un par l'autre.
+  - **Salle-trésor en haut de crue_01** (retour de Lucas, avec une image du
+    haut du puits : « il faudrait un mur breche à casser pour passer à la
+    suite, un trésor au centre d'une jolie salle ») : extension du MÊME
+    fichier de salle (pas de nouvelle salle/porte, cohérent avec la
+    décision "pas de porte, on continue jusqu'au cœur du temple/livre" du
+    round précédent) — `tools/gen_room_crue01.mjs` : le puits garde sa
+    largeur `SHAFT_W=14` inchangée pour toute sa géométrie existante,
+    `CHAMBER_W=6` ajoute une chambre à droite (bedrock plein sauf
+    l'intérieur vidé, rows1-8) accessible en cassant un nouveau mur BRÈCHE
+    (`mur_breche_crue_tresor`, 3 rangées, sur le mur du puits juste
+    au-dessus de la plateforme du robinet) ; un objet `treasure` au centre
+    de la chambre. Nouveau type d'objet générique `treasure` (game.ts) :
+    même mécanique de ramassage qu'un `fragment` (flag + narration au
+    ramassage, persistant via `replayRoomState`) mais texte dédié
+    (`hazard_flavor.ts` gagne `treasureText`, reskinné temple/livre comme le
+    reste) plutôt que le préfixe « Fragment retrouvé » qui n'aurait pas de
+    sens pour un trésor ; rendu réutilisé tel quel (`renderFragment`, déjà
+    générique). **Piège trouvé en implémentant** : `renderCrueWallDecor`
+    utilisait `this.room.pixelWidth - 8` comme mur droit du PUITS — une fois
+    la salle élargie par cette extension, `pixelWidth` désigne désormais le
+    bord du FICHIER (bien plus loin), ce qui aurait décalé tout le décor du
+    mur droit du puits vers le vide. Nouvelle constante dédiée
+    `CRUE01_SHAFT_WIDTH` (même principe que `groundY=496` pour l'arène de
+    chapitre_01 : valeur figée pour cette salle précise, à garder
+    synchronisée avec `SHAFT_W` du générateur) reprend ce rôle ;
+    `this.room.pixelWidth` réutilisé tel quel pour le nouveau 3e plan de
+    décor (voir plus bas), où il désigne maintenant correctement le bord
+    lointain. 6 nouveaux tests de régression sur les données réelles
+    (chambre vide, sol/paroi lointaine solides, mur BRÈCHE localisé,
+    trésor centré, ouverture précise sans effet de bord) ; plusieurs tests
+    existants qui bornaient leurs boucles sur `map.widthTiles` (désormais la
+    largeur du FICHIER, pas du puits) auraient silencieusement testé la
+    mauvaise chose ou échoué à tort — reboisés sur une constante locale
+    `SHAFT_W` dédiée aux tests.
+  - **Vrai arrière-plan pour crue_01** (retour de Lucas : « les décos sur
+    les murs très bien mais je voyais aussi le fond, l'arrière-plan ») :
+    `crue_01` n'est dans aucun des deux systèmes de fond existants
+    (`BACKDROP_ROOMS` de `world/backdrop.ts` — pensé pour des salles à large
+    défilement horizontal, inadapté à ce puits étroit à défilement quasi
+    uniquement vertical). Plutôt que d'y greffer un fond horizontal
+    inadapté, `renderCrueWallDecor` gagne une 3e colonne de motifs à la
+    paroi LOINTAINE de la salle-trésor (`this.room.pixelWidth - 8`,
+    justement libéré par le renommage ci-dessus) — visible en permanence à
+    droite du puits pendant toute la montée (la salle entière, 320px, tient
+    dans les 480px de la vue ; la caméra ne défile jamais horizontalement),
+    donnant enfin une impression de profondeur plutôt que deux simples murs
+    proches. Seed différente (`+101`) pour ne pas dupliquer visuellement les
+    deux autres colonnes.
+  - **Pictogramme cœur aux encriers** (retour de Lucas : « mettre un cœur
+    au niveau du checkpoint de l'encrier ») : `drawHeartIcon` (`ui/hud.ts`,
+    déjà utilisé pour la jauge de PV) exporté et réutilisé au-dessus de
+    CHAQUE encrier du jeu (pas seulement `crue_01` — un encrier restaure
+    toujours les PV au respawn, `failAndRespawn`, c'est une vérité générale
+    du jeu, pas une règle propre à ce niveau) : simple ajout de rendu,
+    aucune nouvelle donnée de salle. Confirmé visible en direct.
+  - **Les plateformes d'encre du joueur sont effacées à chaque
+    réapparition** (retour de Lucas : « si le personnage meurt, il faudrait
+    effacer toutes les plateformes tracées par le joueur... et lui rendre
+    son encre » — cette 2e partie était déjà acquise, `refillInk` existait
+    déjà dans `respawn()`). Nouvelle méthode `Room.clearInk()` (vide le
+    `Set` d'encre tracée d'un coup, ne touche ni au décor naturel ni aux
+    murs BRÈCHE/canon déjà résolus), appelée dans `respawn()` juste après
+    `refillInk`. Portée volontairement générale (toutes les salles, pas
+    seulement `crue_01`) : symétrique au remboursement d'encre déjà
+    universel, et évite qu'un escalier d'encre déjà tracé avant une chute
+    reste utilisable indéfiniment, ce qui viderait de son sens la course
+    contre la montée de `crue_01` en particulier. Testé (`room.test.ts`).
+  - 233 tests (+5), `tsc`/`eslint`/`vite build` verts. Vérifié en Chromium
+    headless (serveur isolé port 5195, Playwright réinstallé temporairement
+    `--no-save` puis désinstallé, `package.json`/`package-lock.json`
+    vérifiés inchangés) : **chambre des mots de ratures_01 rejouée en
+    direct** (double-saut AILES + vol plané pour franchir le petit gouffre,
+    technique tendue à scripter — plusieurs essais nécessaires, la marge
+    entre un saut simple et le gouffre ne laissant qu'une fenêtre étroite
+    sans le vol plané) : deux combinaisons valides mais pas le code
+    (soleil+rouge, ciel+jaune) confirmées affichant le nouveau message ; le
+    code exact (ciel+rouge) n'a PAS pu être isolé et rejoué précisément
+    dans cette session malgré plusieurs tentatives (le pilotage au clavier
+    par durées calculées dérive de façon non déterministe d'un lancement à
+    l'autre, probablement des variations d'ordonnancement du navigateur
+    hors de mon contrôle — même famille de limite que le tracé d'encre,
+    mais ici sur du positionnement au pixel près plutôt que sur le dessin
+    lui-même) ; confiance élevée malgré tout car la branche « bon code »
+    (`isTempleCode === true`) est un code PRÉEXISTANT, non modifié par ce
+    correctif (seul un nouveau `else if` a été ajouté après elle), déjà
+    vérifiée en direct lors du round 27. **crue_01** confirmé en direct :
+    cœur au-dessus de l'encrier visible, décor mural sur 3 colonnes visible
+    (près/mur du puits/paroi lointaine de la salle-trésor), tourelle proche
+    du spawn confirmée tirant sur le joueur (dégâts visibles à la jauge de
+    PV) pendant qu'aucun projectile parasite des tourelles lointaines n'est
+    apparu à l'écran. **Non vérifié en direct** (nécessiterait de se tracer
+    des plateformes d'encre, tracé à la souris non scriptable comme
+    toujours) : casser le nouveau mur BRÈCHE de la salle-trésor et ramasser
+    le trésor en situation réelle (couvert par 6 tests unitaires sur les
+    données réelles), et l'effacement des plateformes d'encre à la mort
+    (couvert par un test unitaire direct sur `Room.clearInk()`, mécanisme
+    trivial et isolé). À confirmer par Lucas en jouant.
+- **Trente-deuxième round (2026-07-29)** — Lucas corrige le round précédent,
+  le jour même, avant tout playtest :
+  - **Malentendu sur le cœur corrigé** : le round précédent avait ajouté un
+    simple PICTOGRAMME décoratif au-dessus de CHAQUE encrier du jeu — Lucas
+    voulait un vrai OBJET à ramasser qui restaure des PV, positionné au
+    niveau d'UN encrier précis de `crue_01`. Pictogramme retiré partout
+    (revert de `drawHeartIcon` sur les encriers, ré-exportée en fonction
+    privée de `ui/hud.ts` comme avant). Question posée à Lucas pour savoir
+    lequel des 2 encriers de `crue_01` ("bas" ou "mi-parcours") — réponse :
+    mi-parcours. Un objet `type: 'potion'` (même mécanique que la fiole de
+    chapitre_01, déjà entièrement câblée : flag, restaure `healPotionFraction`
+    des PV max, rendu = un vrai cœur pulsant avec halo — `renderPotion`,
+    déjà exactement ce que Lucas décrivait, pas besoin de nouveau code)
+    ajouté juste à côté de `encrier_crue_mi_parcours`.
+  - **Salle-trésor repensée en corridor jusqu'en bas** (retour de Lucas :
+    « le trésor devrait être tout en bas, pas une petite alcôve en haut...
+    une fois qu'on a cassé le mur, on redescend tout en bas ») : le mur
+    BRÈCHE reste au même endroit (juste au-dessus de la plateforme du
+    robinet, en haut), mais ce qu'il ouvre n'est plus une petite chambre
+    fermée (rows 1-8) — c'est désormais un long corridor vide qui descend
+    quasiment jusqu'au bas de la salle (rows 1 à H-4), avec son propre sol
+    tout en bas (dernières 3 rangées, comme le sol d'entrée du puits
+    principal) où attend le trésor. Aucune encre nécessaire pour descendre
+    (la chute suffit) — seule la montée du puits principal exige de tracer
+    des plateformes. `tools/gen_room_crue01.mjs` : `TREASURE_ROOM_Y1` passe
+    de 8 à `H-4` ; position du trésor recalculée au niveau du sol
+    (`FLOOR_SURFACE_Y`, même hauteur que le sol d'entrée du puits) plutôt
+    qu'au centre d'une petite chambre.
+  - **Bug trouvé en retravaillant cette géométrie** (pas signalé par Lucas,
+    mais qui aurait gâché l'effet une fois le corridor étendu jusqu'en bas) :
+    `renderHazard` remplissait le liquide montant sur `this.room.pixelWidth`
+    entier — depuis l'ajout de la salle-trésor (round précédent), cette
+    largeur couvre aussi le corridor, qui est pourtant un compartiment
+    séparé du puits (mur plein entre les deux hors du point faible BRÈCHE).
+    Avec le corridor désormais aussi haut que le puits, l'eau se serait
+    affichée par-dessus sur toute sa hauteur, comme si elle inondait aussi
+    la salle-trésor. Corrigé : bornée à `CRUE01_SHAFT_WIDTH * TILE_SIZE`
+    (la constante déjà introduite au round précédent pour le même genre de
+    problème sur le décor mural) plutôt qu'à la largeur du fichier entier.
+  - **Niveau 2 (chapitre_01)** : retour de Lucas — « avant le pouvoir brèche
+    il y a deux encriers, on va garder que celui à côté du pouvoir brèche ».
+    `encrier_chapitre1` (juste après le tout premier mur, avant même HÂTE)
+    retiré ; `encrier_chapitre1_puits` (juste avant le puits d'escalade,
+    collé au mot-pouvoir BRÈCHE) reste seul. Pas de risque de softlock
+    vérifié par relecture : le seul obstacle coûteux en encre entre le
+    spawn et cet encrier restant est le tout premier mur, franchi avec
+    l'encre reportée de `marge_01` (comme c'était déjà implicitement le cas
+    avant que cet encrier n'existe) ; l'encrier retiré ne faisait que
+    rafraîchir la réserve APRÈS ce mur, avant une zone sans autre coût
+    d'encre jusqu'au puits.
+  - 234 tests (+1, nouveau test sur le cœur de `crue_01`, ceux de la
+    salle-trésor et de l'encrier de chapitre_01 réécrits pour la nouvelle
+    géométrie plutôt qu'ajoutés en plus), `tsc`/`eslint`/`vite build` verts.
+    **Pas de vérification Playwright cette passe** (retour de Lucas,
+    2026-07-29 : « pas besoin de systématiquement faire playwright... on
+    perd du temps et des tokens ») — confiance basée sur les tests
+    unitaires (déjà réécrits contre les données réelles régénérées) et la
+    relecture de code ; à confirmer par Lucas en jouant.
+- **Trente-troisième round (2026-07-29) — la salle-trésor devient une vraie
+  salle séparée + effondrement du plafond ; `restartLevel()` généralisé** :
+  deux retours de Lucas, le même jour, avant tout playtest du round
+  précédent.
+  - **Bug trouvé et sa cause** : tomber dans le corridor du round précédent
+    (pour aller chercher le trésor tout en bas de crue_01) déclenchait à
+    tort la défaite « les eaux se referment sur toi », alors que ce
+    corridor n'a jamais contenu d'eau. Cause : `isCaughtByHazard`
+    (world/rising_hazard.ts) ne compare que la coordonnée Y du joueur à
+    `hazardY` — aucune notion de "compartiment" — et `hazardY` est une
+    valeur unique pour toute la salle `crue_01`, dont ce corridor faisait
+    partie (même fichier). Plutôt que d'apprendre à l'aléa à distinguer des
+    zones (complexifier une mécanique qui marche bien partout ailleurs),
+    Lucas préfère une salle séparée : « on va plutôt faire une porte qui
+    mène à une salle aux trésors ».
+  - **`salle_tresor` (nouvelle salle, `tools/gen_room_salle_tresor.mjs`)** :
+    petite pièce plate (26×10, aucun tracé d'encre requis). Le mur BRÈCHE de
+    crue_01 (inchangé, même position) n'ouvre plus que sur une petite alcôve
+    contenant une porte (`porte_salle_tresor` → `salle_tresor`) ; l'ancien
+    corridor-jusqu'en-bas est retiré. Dans `salle_tresor` : le trésor près
+    de l'entrée, puis, une fois ramassé, « le temple tremble et des bouts du
+    plafond tombent » (demande de Lucas) — il faut courir jusqu'à une
+    seconde porte (sortie) sans se faire toucher. Les deux portes ramènent
+    à `crue_01` sur la plateforme du haut, à des positions différentes
+    (convention habituelle anti-re-déclenchement).
+  - **Effondrement** : nouveau module pur `game/world/falling_debris.ts`
+    (même pattern D12 que `enemies/turret.ts` : types + fonctions pures,
+    testé) — les blocs tombent en boucle depuis des points fixes du
+    plafond (objets `debris_spawn`, données de salle) choisis en
+    ROUND-ROBIN plutôt qu'au hasard (déterministe, testable, même esprit
+    que `seededRandom` ailleurs dans le projet). `collapseActive` est un
+    état de SESSION (jamais persisté) posé au ramassage du trésor
+    (`checkPickups`, gated sur `room.id === 'salle_tresor'`) : revisiter la
+    salle après coup (trésor déjà pris) ne redéclenche pas la chute — le
+    danger est lié au geste de ramasser, pas à un flag permanent. Un échec
+    pendant la course (`handleCrushed`, même sévérité que les autres échecs
+    du jeu) redonne un essai frais : `respawn()` vide `debrisField` quand
+    `collapseActive` est vrai dans cette salle. Textes reskinnés
+    temple/livre comme le reste (`hazard_flavor.ts` gagne `collapseMessage`/
+    `crushedMessage`).
+  - **`restartLevel()` généralisé** (retour de Lucas, signalé sur le
+    robinet de `crue_01` qui restait fermé après « Recommencer le niveau » :
+    « il faut vraiment reset comme si qu'on venait de rentrer dans le
+    niveau »). Jusqu'ici cette fonction ne remettait à zéro QUE les
+    mots-loi de `marge_01` (barrières/blancs canon) — tout le reste de
+    l'état mécanique des autres salles (murs BRÈCHE cassés, fioles/cœurs
+    bus, robinet actionné, code du temple trouvé...) restait figé pour de
+    bon. Deux catégories, traitées différemment :
+    1. Flags portés par la propriété `flag` d'un objet de la salle (canon,
+       BRÈCHE, potion/cœur, fragment, trésor) : une seule boucle générique
+       sur `this.room.map.objects` les remet tous à `false`, plutôt que
+       d'énumérer chaque type comme avant (l'ancienne boucle ne couvrait
+       QUE `canonBarriers`/`canonBlanks`).
+    2. Flags lus/écrits directement dans le code, sans objet porteur (le
+       robinet de `crue_01`, la défaite du mi-boss de `chapitre_01`, le
+       code du temple et les couleurs du monde de `ratures_01`, la fin de
+       `marge_01`) : remis à `false` explicitement, salle par salle.
+    Volontairement épargné : les flags posés par les DIALOGUES (catégorie
+    distincte, état de conversation) et `content_fin_actuelle` (simple
+    marqueur méta "contenu vu", pas un obstacle de la salle — le réafficher
+    à chaque restart de test serait juste bruyant). `flags.json` mis à jour
+    en conséquence pour chaque flag concerné.
+  - 247 tests (+13 : falling_debris.test.ts, nouveau describe salle_tresor
+    dans tilemap.test.ts, tests crue_01 réécrits pour l'alcôve+porte plutôt
+    que le corridor+trésor), `tsc`/`eslint`/`vite build` verts. **Pas de
+    vérification Playwright cette passe non plus** (même consigne que le
+    round précédent) — confiance basée sur les tests unitaires (géométrie
+    des 2 salles vérifiée contre les données réelles régénérées, logique de
+    chute/collision/round-robin couverte unitairement) et la relecture de
+    code ; à confirmer par Lucas en jouant, notamment le rythme de la
+    course contre les blocs (valeurs de `FALLING_DEBRIS` posées comme un
+    premier passage raisonnable, pas calibrées en jeu réel) et si
+    `restartLevel()` couvre bien tout ce qu'il attendait.
+- **Trente-quatrième round (2026-07-29) — musique de fond + menu Options +
+  bruitages synthétisés** : Lucas ajoute un fichier `src/fx/music/
+  HackathonGameSong.mp3` et demande qu'il boucle tant que le jeu est actif,
+  s'atténue quand le menu pause est ouvert, avec un menu Options pour le
+  couper ; et suggère (« si jamais tu peux trouver ») des bruitages pour
+  saut/dash/double saut/tir.
+  - **Pas de recherche de fichiers audio externes** : je ne peux pas
+    parcourir le web pour "trouver" des bruitages libres de droits à
+    télécharger (pas d'outil de navigation/téléchargement binaire fiable
+    ici, et la règle du projet interdit d'inventer des URLs). Choix
+    cohérent avec D9 ("aucun asset", tout le rendu visuel est déjà dessiné
+    au code) : les 4 bruitages sont synthétisés en Web Audio API
+    (oscillateurs + glissando de fréquence), zéro fichier, zéro dépendance,
+    zéro question de licence.
+  - **`engine/audio.ts`** (nouveau, générique, comme Input/Pointer/
+    Renderer) : `MusicPlayer` (HTMLAudioElement en boucle, volume = base ×
+    atténuation temporaire, coupure indépendante) et `SfxPlayer`
+    (AudioContext créé paresseusement au premier son, un oscillateur par
+    bruitage). Seule `resolveChannelVolume` (calcul pur du volume à partir
+    de muted/base/atténuation) est testée unitairement — le reste dépend
+    d'API navigateur absentes de jsdom, même convention que game.ts/ui/*.
+  - **Autoplay** : `MusicPlayer.tryPlay()` tente la lecture immédiatement
+    à la construction ; si le navigateur bloque (aucun geste utilisateur
+    encore reçu), un écouteur `pointerdown`/`keydown` posé une seule fois
+    réessaie automatiquement — encapsulé dans `MusicPlayer` lui-même (une
+    contrainte du navigateur, pas une préoccupation du jeu), `game.ts`
+    n'appelle `tryPlay()` qu'une fois, au constructeur.
+  - **Ducking pendant la pause** : `MusicPlayer.setDuckFactor` recalculé à
+    CHAQUE frame dans `update()` (`this.mode === 'paused' ? ... : 1`)
+    plutôt que sur les seules transitions de mode — évite un volume qui
+    resterait bloqué atténué après un "Quitter" direct depuis le menu
+    pause vers l'écran-titre.
+  - **Réglage persistant** : nouveau `game/settings.ts` (même mécanisme que
+    `save.ts` : `engine/save.ts` générique + schéma/validation ici), clé
+    localStorage séparée des emplacements de sauvegarde (`musicMuted` est
+    une préférence d'appareil, pas une progression de partie — reste donc
+    coupée même après "Nouvelle partie" ou en changeant d'emplacement).
+  - **Menu Options** : nouvelle vue partagée `ui/options_menu.ts` (même
+    principe que `ui/slot_list.ts`, déjà réutilisé entre écran-titre et
+    menu pause) — une bascule musique + "Retour". Accessible des DEUX
+    côtés : `TitleView`/`PauseView` gagnent tous les deux `'options'`
+    (`TITLE_MENU_OPTIONS`/`PAUSE_MENU_OPTIONS` gagnent une entrée
+    "Options"). Reindexation du menu pause (Options inséré en position 3,
+    Admin et Quitter décalés d'un cran) : vérifiée par relecture attentive
+    du mapping index→action plutôt que par un passage Playwright (retour de
+    Lucas du round précédent sur le coût de ces vérifications — une
+    réindexation de menu est un risque mécanique traçable par lecture de
+    code, contrairement à un bug de rendu qui ne se voit qu'à l'écran).
+  - **Bruitages branchés** : saut au sol (même endroit que le burst de
+    particules existant), double saut AILES (nouveau `prevAirJumpsUsed`,
+    détecte le front 0→1 de `airJumpsUsed`, même principe que
+    `prevDashTimer` déjà utilisé pour le burst de dash), dash HÂTE (même
+    bloc que son burst existant), tir de projectile (mi-boss ET tourelles :
+    comptage du nombre de projectiles avant/après `stepBoss`/`stepTurret`,
+    un nouveau projectile suffit à savoir qu'un tir vient d'avoir lieu —
+    pas besoin d'un évènement dédié dans ces modules purs). Pas de bascule
+    dédiée pour les bruitages (la demande ne portait que sur la musique) ;
+    `SfxPlayer.setMuted` existe mais n'est appelée nulle part pour
+    l'instant.
+  - **ACKNOWLEDGEMENTS.md** : ligne ajoutée pour le fichier musique,
+    marquée `[TODO Lucas]` — je ne connais pas sa source/licence (ajouté
+    directement par Lucas, pas via une session de code), à compléter par
+    lui. Les bruitages synthétisés n'ont rien à référencer (aucun fichier).
+  - 256 tests (+9 : audio.test.ts, settings.test.ts), `tsc`/`eslint`/
+    `vite build` verts (le build confirme aussi que l'import Vite du fichier
+    `.mp3` fonctionne : `dist/assets/HackathonGameSong-*.mp3` généré,
+    fingerprint inclus). **Pas de vérification Playwright cette passe**
+    (conforme au retour de Lucas) — et de toute façon peu utile ici : le
+    son ne se voit pas sur une capture d'écran, seule une écoute réelle
+    peut confirmer que la musique boucle, s'atténue en pause, et que les
+    bruitages sonnent bien. La navigation des menus (Options depuis le
+    titre et la pause, réindexation) a été vérifiée par relecture complète
+    du mapping plutôt qu'en direct. À confirmer par Lucas en jouant, au
+    casque/haut-parleurs : la musique boucle sans coupure audible au point
+    de bouclage, le ducking en pause est perceptible, la coupure/reprise
+    via le menu Options fonctionne dans les deux sens (titre et pause), et
+    si les 4 bruitages synthétisés (de simples glissandos, pas des sons
+    "réalistes") sont satisfaisants ou méritent d'être remplacés par de
+    vrais fichiers audio plus tard.
+- **Trente-cinquième round (2026-07-29) — la 2e porte de la salle aux
+  trésors devient la fin du jeu** : deux réponses de Lucas.
+  - `HackathonGameSong.mp3` est une composition originale de Lucas (créée
+    quelques mois avant le projet) : `[TODO Lucas]` retiré
+    d'`ACKNOWLEDGEMENTS.md`, aucun souci de licence.
+  - **Fin du jeu** : la porte de sortie de `salle_tresor` (round 33) menait
+    en boucle vers `crue_01` faute d'avoir un endroit où aller ; Lucas
+    précise qu'elle devrait mener « à l'extérieur du temple », la vraie fin
+    du jeu construit jusqu'ici, avec deux textes de clôture : POINT
+    FINAL/indécis, l'enfant rapporte le trésor à son village et tout le
+    monde est content ; RATURE, le pouvoir du trésor libère le mot du livre,
+    qui devient libre de créer sa propre histoire.
+  - Nouvelle propriété Tiled générique `endsGame` (`tools/gen_room_
+    salle_tresor.mjs`, `porte_sortie_tresor`) : plus de `targetRoom`, cette
+    porte ne transite nulle part. `checkDoors` (game.ts) l'intercepte avant
+    la logique de transition et appelle `finalizeEnding()` (même principe
+    que `finalizeChapter1` : l'issue RATURE/POINT FINAL se déduit du flag
+    `rature_jamais` déjà posé en `marge_01`, pas un nouveau choix ; flag
+    idempotent `jeu_termine`, remis à `false` par `restartLevel()` sur
+    `salle_tresor` comme le reste de l'état mécanique des autres salles).
+  - Nouveau mode `'ending'` (`Mode`, game.ts) : `showNarration` gagne un 2e
+    paramètre optionnel `onClose?: 'ending'` — la narration de clôture
+    (texte différent par chemin) se referme sur ce mode au lieu de
+    `'playing'`. Gelé comme `'title'`/`'paused'` (aucune simulation, Échap
+    sans effet) ; `updateEnding()` n'accepte qu'un seul geste (E, Espace ou
+    clic) qui appelle directement `quitGame()` (réutilisé tel quel, retour
+    à l'écran-titre). Rendu : nouveau `ui/ending_screen.ts` (même style que
+    `title_menu.ts`/`options_menu.ts`, panneau + `panel()` dupliqué par
+    convention du projet plutôt que partagé) affiché à la place du niveau
+    (gameplay/HUD masqués comme en mode `'title'`, salle vide + parchemin
+    nu derrière). Nouvel événement `game_ended` (`events.ts`), même
+    principe que `chapter_ended`.
+  - Textes marqués `[proposition]` (reformulation des idées de Lucas en
+    phrases jouables, cohérentes avec le ton déjà établi par
+    `finalizeChapter1` et sans aucun tiret, règle du projet) : à valider.
+  - 256 tests (inchangé, un test de porte réécrit pour la nouvelle
+    géométrie plutôt qu'ajouté), `tsc`/`eslint`/`vite build` verts (build
+    revérifié pour confirmer que retirer `targetRoom`/`targetX`/`targetY`
+    d'une porte ne casse rien). Pas de vérification Playwright (conforme au
+    retour de Lucas du round 33) : la géométrie de la salle est couverte
+    par un test unitaire réécrit contre les données réelles, et l'écran de
+    fin lui-même suit exactement le même patron (état + rendu) que
+    l'écran-titre déjà éprouvé visuellement par le passé. À confirmer par
+    Lucas en jouant jusqu'au bout : le texte de fin sur les deux chemins,
+    et l'écran de fin qui ramène bien à l'écran-titre au clic/à la touche.
+- **Trente-sixième round (2026-07-29) — bug de chute en boucle après un
+  écrasement, eau plus rapide, cinématique de fin RATURE** : trois retours
+  de Lucas.
+  - **Bug corrigé : se faire écraser par un rocher dans `salle_tresor`
+    téléportait dans l'eau de `crue_01`, en boucle** (« pas agréable »).
+    Cause : `handleCrushed()` passait par `failAndRespawn()`/`respawn()`,
+    qui replacent le joueur à `this.checkpoint` — forcément dans `crue_01`
+    (aucun encrier dans `salle_tresor`) — SANS jamais changer `this.room`.
+    Le joueur se retrouvait donc aux coordonnées (souvent profondes) du
+    puits tout en restant dans la petite salle-trésor (26×10 tuiles), hors
+    de tout sol solide : `handleFall()` se redéclenchait aussitôt, qui
+    rappelle `respawn()`, qui replace au même endroit... boucle infinie de
+    chute. `handleCrushed()` ne passe plus par `respawn()` : réapparition
+    locale au point de départ DE `salle_tresor` (son propre objet `spawn`),
+    effondrement arrêté (`collapseActive=false`, `debrisField` neuf) et
+    **trésor remis en place** (`collectedObjects`/flag réinitialisés, retour
+    de Lucas : « avec le trésor remis en place ») — il faut recommencer la
+    course depuis le début plutôt que de continuer une chute déjà entamée.
+  - **Eau de `crue_01` accélérée** : `RISING_HAZARD.riseSpeed` 12→16 px/s
+    (retour de Lucas : « un petit peu plus vite »), premier ajustement de
+    calibrage depuis l'introduction de la mécanique (round 28, posée
+    volontairement modeste faute de pouvoir tester le tracé à la souris).
+  - **Cinématique de fin RATURE** (demande de Lucas : « une petite
+    cinématique de notre personnage qui s'en va, qui sort du livre
+    doucement, et qui disparaît dans un fondu au noir avec "Fin... pour
+    l'instant !" ») : POINT FINAL/indécis garde l'écran de fin classique du
+    round 35 (`drawEndingScreen`, panneau parchemin) ; RATURE gagne une
+    séquence dédiée. Nouvel état `endingSceneState`
+    (`'walking'`/`'fadingOut'`/`'done'`, posé par `updateNarration` au moment
+    précis où la narration de clôture se referme, pas par `finalizeEnding`
+    qui peut tourner bien avant que le joueur ait fini de lire) : le
+    personnage marche (`renderEndingWalkAway`, réutilise telle quelle la
+    silhouette articulée `drawMargeChildFigure` déjà écrite pour l'enfant de
+    `marge_01` — cohérent avec « notre personnage », en espace vue puisque
+    aucune caméra n'est active à cet endroit du pipeline de rendu), puis un
+    fondu au noir (`PALETTE.ink`, aucune couleur inventée) recouvre l'écran,
+    puis `drawRatureEndingText` (nouveau, `ui/ending_screen.ts`) affiche
+    « Fin... pour l'instant ! » sur fond noir plutôt que le panneau
+    parchemin — fin ouverte plutôt que définitive, cohérent avec le sens
+    déjà établi de RATURE (le mot part écrire sa propre histoire, rien n'est
+    clos). Nouveau groupe de constantes `ENDING_SCENE` (`config.ts`,
+    walkSeconds/fadeSeconds/walkCycleHz). Un appui (E/Espace/clic) pendant
+    la cinématique la saute directement au texte final (même convention que
+    la narration qui s'affiche d'un coup au premier appui) ; `this.time`
+    doit continuer d'avancer en mode `'ending'` (ajouté explicitement dans
+    `update()`, contrairement à `'title'`/`'paused'` qui gèlent tout) pour
+    que la progression de la cinématique se calcule.
+  - 256 tests (inchangé, les 3 correctifs touchent au rendu/à l'équilibrage,
+    pas à la logique pure testée), `tsc`/`eslint`/`vite build` verts. Pas de
+    vérification Playwright : le tracé d'encre reste nécessaire pour
+    atteindre ces salles (limite connue, non scriptable) ; la cinématique
+    réutilise un mécanisme déjà éprouvé visuellement par le passé
+    (`drawMargeChildFigure`). À confirmer par Lucas en jouant : que
+    l'écrasement redonne bien un essai propre dans `salle_tresor` (plus de
+    boucle), la nouvelle vitesse de l'eau, et le rythme/lisibilité de la
+    cinématique RATURE (durées `[proposition]`, premier passage non
+    calibré en jeu réel).
+- **Trente-septième round (2026-07-29) — correction de la cinématique de fin
+  avant même un premier essai** : deux retours de Lucas sur le round
+  précédent.
+  - **La cinématique RATURE utilisait la mauvaise silhouette** : round 36
+    avait réutilisé `drawMargeChildFigure` (la silhouette articulée de
+    l'enfant de `marge_01`) par réflexe, alors que Lucas voulait « notre
+    personnage principal » — celui qu'on incarne (`renderPlayer`, la même
+    forme d'encre qu'en jeu). Corrigé : `updateEnding()` repositionne
+    directement `this.player.body` pendant l'état `'walking'` (simulation
+    gelée en mode `'ending'`, rien d'autre n'y touche), `renderEndingWalkAway`
+    se contente d'appeler `this.renderPlayer(ctx)`. `drawMargeChildFigure`
+    reste utilisée telle quelle pour la scène de `marge_01` (non concernée).
+    Bug latent corrigé au passage (trouvé en review, pas signalé par
+    Lucas) : `landTimer` (squash à l'atterrissage) ne se décrémente que
+    dans `updatePlaying`, jamais appelée en mode `'ending'` — sans reset
+    explicite, un atterrissage juste avant la porte serait resté figé
+    (squash visible) pendant toute la marche. `ENDING_SCENE` perd
+    `walkCycleHz` (plus de cycle de marche à piloter, `renderPlayer` n'en a
+    pas) et gagne `walkStartX`/`walkEndX`/`groundY` (positions en espace vue).
+  - **Texte POINT FINAL enrichi** (Lucas : « juste un texte qui dit que
+    l'enfant rentre à son village et offre le trésor à son peuple, devient
+    un bon roi etc » ) : remplace l'ancien texte plus générique
+    (`finalizeEnding`, game.ts). RATURE inchangé (déjà une cinématique
+    dédiée, pas juste un texte).
+  - Nettoyage : `drawEndingScreen` (`ui/ending_screen.ts`) ne sert plus
+    QUE pour POINT FINAL/indécis depuis que RATURE a sa propre cinématique
+    (round 36) — paramètre `kind`/type `EndingKind` devenus morts, retirés
+    plutôt que laissés comme branche inatteignable.
+  - 256 tests (inchangé), `tsc`/`eslint`/`vite build` verts (un
+    `no-unnecessary-condition` d'ESLint attrapé au passage dans
+    `updateEnding` : le narrowing de type sur `endingSceneState` rendait un
+    second test d'égalité toujours vrai après le premier `if`/`else if`,
+    simplifié). Pas de vérification Playwright (même limite qu'au round
+    36 : ces salles nécessitent le tracé d'encre pour y accéder).
+- **Trente-huitième round (2026-07-29)** — deux nouveaux retours de Lucas,
+  toujours avant un premier playtest de la cinématique :
+  - **Eau de `crue_01` encore accélérée** : `RISING_HAZARD.riseSpeed` 16→20
+    px/s (« il faudrait qu'elle monte un peu plus vite encore » — 3ᵉ
+    ajustement de cette valeur le même jour, 12→16→20).
+  - **Bug corrigé : fond de page incomplet pendant la cinématique de fin
+    RATURE** (« il faut élargir sur toute la surface le fond de page qu'il y
+    a déjà »). Cause : `this.paper` (texture parchemin peinte une fois par
+    salle, `createPaperTexture`) est dimensionnée à la salle COURANTE —
+    `salle_tresor` fait 416×160 px, plus petit que la vue 480×270 — et le
+    dessin habituel (`ctx.drawImage(this.paper, 0, 0)`, taille naturelle) ne
+    couvrait donc pas tout l'écran, laissant un bord non peint visible
+    pendant la marche du personnage. Corrigé dans `renderEndingWalkAway` en
+    réutilisant EXPLICITEMENT la même texture mais étirée sur toute la vue
+    (`ctx.drawImage(this.paper, 0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT)`,
+    surcharge « taille de destination » de `drawImage`) plutôt qu'en créant
+    une texture dédiée à la cinématique — exactement ce que Lucas demandait
+    (« le fond de page qu'il y a déjà », pas un nouveau fond).
+  - 256 tests (inchangé, deux ajustements de rendu/équilibrage), `tsc`/
+    `eslint`/`vite build` verts. Pas de vérification Playwright (même
+    limite qu'aux rondes 36-37).

@@ -1,18 +1,22 @@
 /**
  * Menu pause (Échap) : recommencer le niveau, sauvegarder, voir les pouvoirs,
- * admin (aller à un niveau), quitter. Pur affichage — la navigation/les
- * actions vivent dans game.ts. Retour de playtest 2026-07-22 : aucun moyen de
- * relire les commandes des pouvoirs ni de recommencer une salle ratée.
- * Option Admin ajoutée le 2026-07-27. Option Sauvegarder ajoutée le
- * 2026-07-28 (demande de Lucas : le choix d'emplacement ne doit se faire
+ * options, admin (aller à un niveau), quitter. Pur affichage — la
+ * navigation/les actions vivent dans game.ts. Retour de playtest 2026-07-22 :
+ * aucun moyen de relire les commandes des pouvoirs ni de recommencer une
+ * salle ratée. Option Admin ajoutée le 2026-07-27. Option Sauvegarder ajoutée
+ * le 2026-07-28 (demande de Lucas : le choix d'emplacement ne doit se faire
  * qu'au moment de sauvegarder/charger, pas à la création d'une partie) — vue
  * 'save', même liste d'emplacements que l'écran-titre (`ui/slot_list.ts`).
+ * Option Options ajoutée le 2026-07-29 (musique) : vue 'options' dessinée par
+ * `ui/options_menu.ts` (partagée avec l'écran-titre), pas par ce module —
+ * `view === 'options'` n'a donc rien à dessiner ici, `drawPauseMenu` renvoie
+ * juste sans rien faire si jamais appelée avec cette vue par erreur.
  */
 import { hexAlpha, INTERNAL_HEIGHT, INTERNAL_WIDTH, PALETTE, RENDERING } from '../config';
 import type { AbilityDef } from '../player/abilities';
 import { drawSlotList, type SlotDisplay } from './slot_list';
 
-export type PauseView = 'menu' | 'powers' | 'admin' | 'save';
+export type PauseView = 'menu' | 'powers' | 'admin' | 'save' | 'options';
 
 export interface AdminRoom {
   id: string;
@@ -23,6 +27,7 @@ export const PAUSE_MENU_OPTIONS = [
   'Recommencer le niveau',
   'Sauvegarder',
   'Voir les pouvoirs',
+  'Options',
   'Admin : aller à un niveau',
   'Quitter',
 ] as const;
@@ -58,6 +63,7 @@ export function drawPauseMenu(
     drawSlotList(ctx, 'Sauvegarder : quel emplacement ?', selected, saveSlots, pendingOverwriteSlot, false, 'Échap : retour');
     return;
   }
+  if (view === 'options') return; // dessiné par ui/options_menu.ts (partagé avec l'écran-titre), pas ici
 
   ctx.fillStyle = hexAlpha(PALETTE.ink, 0.5);
   ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);

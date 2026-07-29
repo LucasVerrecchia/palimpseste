@@ -1,0 +1,18 @@
+{
+  "id": "pnj_ratures_indice_rouge",
+  "start": "intro",
+  "startVariants": [
+    { "when": { "rature_jamais": true }, "start": "rature_intro" }
+  ],
+  "_comment": "[proposition narration, à valider avec Lucas]. Second PNJ-indice, sur une autre plateforme en hauteur (voir pnj_ratures_indice_ciel.json). Donne un indice sur l'ATTRIBUT du code (« rouge ») sans le nommer — image oblique (chaleur/colère/aube) plutôt qu'une élimination directe par la couleur. Sur RATURE, ce PNJ n'apparaît même plus (hiddenIfFlag).",
+  "nodes": {
+    "intro": {
+      "speaker": "La Colère Froissée",
+      "text": "Pas le calme. Pas le silence de l'eau qui dort. Pense à la couleur qui bat quand le cœur s'emballe, à la première brûlure de l'aube avant que le jour soit sûr de lui."
+    },
+    "rature_intro": {
+      "speaker": "La Colère Froissée",
+      "text": "Toi, tu peux déjà tout réécrire. Mes indices ne te serviraient à rien."
+    }
+  }
+}

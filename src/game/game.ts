@@ -10,8 +10,10 @@
  * Rendu « manuscrit moderne » (D9) : vectoriel haute résolution, dalles
  * arrondies ombrées, particules d'encre, squash & stretch. Aucun asset.
  */
+import { MusicPlayer, SfxPlayer } from '../engine/audio';
 import { Camera } from '../engine/camera';
 import type { Input } from '../engine/input';
+import { seededRandom, tileIndicesCovering } from '../engine/parallax';
 import { aabbOverlap } from '../engine/physics';
 import type { Pointer } from '../engine/pointer';
 import type { Viewport } from '../engine/renderer';
@@ -28,13 +30,16 @@ import {
   BOSS_INTRO_RANGE,
   CHAPITRE1_ARENA_SCENE,
   DRAW,
+  ENDING_SCENE,
   ENEMY,
+  FALLING_DEBRIS,
   hexAlpha,
   INK,
   INTERACT_MARGIN,
   INTERNAL_HEIGHT,
   INTERNAL_WIDTH,
   MARGE_CHILD_SCENE,
+  MUSIC,
   NARRATION_CHARS_PER_SECOND,
   PAGE_TRANSFORM_TINT_ALPHA,
   PALETTE,
@@ -42,7 +47,10 @@ import {
   PHYSICS,
   PLAYER,
   RENDERING,
+  RISING_HAZARD,
+  SFX,
   TILE_SIZE,
+  TURRET,
   TOAST_SECONDS,
   TOAST_STAGGER_SECONDS,
 } from './config';
@@ -55,6 +63,13 @@ import {
   type BossState,
 } from './enemies/boss_coquille_majuscule';
 import { createEnemy, overlapsPlayer, resolveDashHit, stepEnemy, type Enemy } from './enemies/enemy';
+import {
+  createTurret,
+  resolveTurretDashHit,
+  resolveTurretProjectileHits,
+  stepTurret,
+  type TurretState,
+} from './enemies/turret';
 import { createGameBus, type GameEventBus } from './events';
 import {
   advanceDialogue,
@@ -70,8 +85,11 @@ import { allAbilities, getAbility, hasAbility } from './player/abilities';
 import { stepPlayer, type PlayerState } from './player/controller';
 import { canAfford, createInk, reclaimInk, refillInk, spendInk, type InkState } from './player/ink';
 import { parseSave, saveKey, SAVE_SLOT_COUNT, SAVE_VERSION, type SaveData } from './save';
+import { DEFAULT_SETTINGS, parseSettings, SETTINGS_KEY } from './settings';
 import { drawDialogueBox, drawNarrationBox, hitTestDialogueChoices, type DialogueLayout } from './ui/dialogue_box';
+import { drawEndingScreen, drawRatureEndingText } from './ui/ending_screen';
 import { drawHud, drawToasts, type Toast } from './ui/hud';
+import { drawOptionsMenu, hitTestOptionsMenu } from './ui/options_menu';
 import {
   drawPauseMenu,
   hitTestPauseAdmin,
@@ -82,6 +100,7 @@ import {
 } from './ui/pause_menu';
 import { drawSlotList, hitTestSlotList, type SlotDisplay } from './ui/slot_list';
 import { drawTitleMain, hitTestTitleMain, TITLE_MENU_OPTIONS, type TitleView } from './ui/title_menu';
+import musicUrl from '../fx/music/HackathonGameSong.mp3';
 import { renderBackdrop } from './world/backdrop';
 import { Room } from './world/room';
 import {
@@ -95,6 +114,9 @@ import {
   type SentenceVariant,
 } from './narrative/deviation';
 import { resolveBossFlavor, type BossFlavorVariant } from './narrative/boss_flavor';
+import { resolveHazardFlavor, type HazardFlavorVariant } from './narrative/hazard_flavor';
+import { advanceHazard, isCaughtByHazard } from './world/rising_hazard';
+import { createDebrisField, debrisHitsPlayer, stepDebrisField, type DebrisField } from './world/falling_debris';
 import {
   composeTransformSentence,
   resolveTransformation,
@@ -104,14 +126,17 @@ import {
 } from './narrative/world_transform';
 import dialoguePnjMarge from '../data/dialogues/pnj_marge.json';
 import dialoguePnjRatures from '../data/dialogues/pnj_ratures.json';
-import dialoguePnjRaturesIndicePersonnage from '../data/dialogues/pnj_ratures_indice_personnage.json';
-import dialoguePnjRaturesIndiceBleu from '../data/dialogues/pnj_ratures_indice_bleu.json';
+import dialoguePnjRaturesIndiceCiel from '../data/dialogues/pnj_ratures_indice_ciel.json';
+import dialoguePnjRaturesIndiceRouge from '../data/dialogues/pnj_ratures_indice_rouge.json';
 import roomMarge01 from '../data/rooms/marge_01.json';
 import roomChapitre01 from '../data/rooms/chapitre_01.json';
 import roomRatures01 from '../data/rooms/ratures_01.json';
+import roomCrue01 from '../data/rooms/crue_01.json';
+import roomSalleTresor from '../data/rooms/salle_tresor.json';
 import chapterMarge01 from '../data/chapters/marge_01.json';
 import chapterChapitre01 from '../data/chapters/chapitre_01.json';
 import chapterRatures01 from '../data/chapters/ratures_01.json';
+import chapterCrue01 from '../data/chapters/crue_01.json';
 
 /**
  * Registre des salles chargeables (Phase 2, D13) : au lieu d'une seule salle
@@ -122,6 +147,8 @@ const ROOMS: Record<string, unknown> = {
   marge_01: roomMarge01,
   chapitre_01: roomChapitre01,
   ratures_01: roomRatures01,
+  crue_01: roomCrue01,
+  salle_tresor: roomSalleTresor,
 };
 
 const DEFAULT_ROOM_ID = 'marge_01';
@@ -131,6 +158,8 @@ const ADMIN_ROOMS: readonly AdminRoom[] = [
   { id: 'marge_01', label: 'La Marge (chapitre 1)' },
   { id: 'chapitre_01', label: 'Le Chapitre Premier (niveau 2)' },
   { id: 'ratures_01', label: 'Les Ratures (niveau 3)' },
+  { id: 'crue_01', label: 'La Crue (niveau 4)' },
+  { id: 'salle_tresor', label: 'La salle aux trésors (bonus, niveau 4)' },
 ];
 
 /**
@@ -150,7 +179,25 @@ const ROOM_SHORT_LABELS: Record<string, string> = {
   marge_01: 'La Marge',
   chapitre_01: 'Le Chapitre Premier',
   ratures_01: 'Les Ratures',
+  crue_01: 'La Crue',
+  salle_tresor: 'La salle aux trésors',
 };
+/**
+ * Flag posé en actionnant le robinet/fermoir en haut de crue_01 (retour de
+ * Lucas 2026-07-29) : arrête pour de bon la montée du liquide (`updateHazard`).
+ * Nom de flag fixe (comme `boss_coquille_majuscule_vaincu`, `chapitre1_fini`)
+ * plutôt que lu depuis une propriété de l'objet `valve` : un seul robinet
+ * dans un seul niveau, pas besoin d'indirection.
+ */
+const CRUE01_VALVE_FLAG = 'crue01_eau_stoppee';
+/**
+ * Largeur (en tuiles) du puits vertical proprement dit dans crue_01, avant
+ * l'extension "salle-trésor" ajoutée à droite (2026-07-29). Doit rester
+ * synchronisée avec `SHAFT_W` de `tools/gen_room_crue01.mjs` — vérifiée par
+ * un test de régression sur les données réelles (tests/tilemap.test.ts).
+ */
+const CRUE01_SHAFT_WIDTH = 14;
+
 const LEANING_SHORT: Record<Leaning, string> = {
   rature: 'RATURE',
   point_final: 'POINT FINAL',
@@ -204,6 +251,40 @@ function parseBossFlavorVariants(raw: readonly unknown[]): BossFlavorVariant[] {
   return variants;
 }
 
+/** Lecture défensive des variantes de peau du liquide montant (import JSON → type sûr), même principe. */
+function parseHazardFlavorVariants(raw: readonly unknown[]): HazardFlavorVariant[] {
+  const variants: HazardFlavorVariant[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const obj = entry as Record<string, unknown>;
+    const { name, color, introNarration, catchMessage, valveLabel, stopMessage, treasureText, collapseMessage, crushedMessage } = obj;
+    if (
+      typeof name !== 'string' ||
+      (color !== 'ink' && color !== 'unwritten') ||
+      typeof introNarration !== 'string' ||
+      typeof catchMessage !== 'string' ||
+      typeof valveLabel !== 'string' ||
+      typeof stopMessage !== 'string' ||
+      typeof treasureText !== 'string' ||
+      typeof collapseMessage !== 'string' ||
+      typeof crushedMessage !== 'string'
+    ) {
+      continue;
+    }
+    const when: Record<string, boolean> = {};
+    const rawWhen = obj['when'];
+    if (typeof rawWhen === 'object' && rawWhen !== null) {
+      for (const [flag, value] of Object.entries(rawWhen as Record<string, unknown>)) {
+        if (typeof value === 'boolean') when[flag] = value;
+      }
+    }
+    variants.push({
+      when, name, color, introNarration, catchMessage, valveLabel, stopMessage, treasureText, collapseMessage, crushedMessage,
+    });
+  }
+  return variants;
+}
+
 /** Lecture défensive des transformations prévues (couple sujet/attribut → effet), même principe. */
 function parseWorldTransformations(raw: readonly unknown[]): WorldTransformation[] {
   const transformations: WorldTransformation[] = [];
@@ -232,12 +313,14 @@ function parseWorldTransformations(raw: readonly unknown[]): WorldTransformation
   return transformations;
 }
 
-type Mode = 'title' | 'playing' | 'dialogue' | 'narration' | 'paused';
+type Mode = 'title' | 'playing' | 'dialogue' | 'narration' | 'paused' | 'ending';
 
 interface NarrationState {
   text: string;
   /** Secondes écoulées depuis le début de l'écriture (× NARRATION_CHARS_PER_SECOND = caractères révélés). */
   elapsedSeconds: number;
+  /** Une fois cette narration refermée, bascule vers ce mode au lieu de `'playing'` (ex. écran de fin). */
+  onClose?: 'ending';
 }
 
 interface ActiveDialogue {
@@ -285,6 +368,16 @@ export class Game {
   private readonly storage: StorageLike;
   private readonly bus: GameEventBus;
   private readonly camera = new Camera();
+  /**
+   * Musique de fond (demande de Lucas 2026-07-29) : bouclée dès la
+   * construction (`tryPlay`, avec repli sur le premier geste utilisateur si
+   * l'autoplay est bloqué — géré dans `MusicPlayer` lui-même), atténuée
+   * pendant le menu pause (`update()`), coupable via le menu Options.
+   */
+  private readonly music: MusicPlayer;
+  /** Bruitages synthétisés (Web Audio, aucun fichier) : saut, double saut, dash, tir. */
+  private readonly sfx = new SfxPlayer();
+  private musicMuted: boolean;
   /** La salle courante ; remplacée entière par `loadRoom` à chaque porte franchie. */
   private room!: Room;
   private readonly dialogues: Record<string, DialogueData>;
@@ -303,6 +396,15 @@ export class Game {
   private readonly bossFlavorVariants = parseBossFlavorVariants(chapterChapitre01.bossFlavorVariants);
   /** Chambre des mots (ratures_01) : transformations prévues, voir narrative/world_transform.ts. */
   private readonly worldTransformations = parseWorldTransformations(chapterRatures01.worldTransformations);
+  /** Liquide montant (crue_01) : peau narrative (temple/livre), voir narrative/hazard_flavor.ts. */
+  private readonly hazardFlavorVariants = parseHazardFlavorVariants(chapterCrue01.hazardFlavorVariants);
+  /**
+   * Hauteur (Y monde) de la surface du liquide montant ; `null` hors de
+   * crue_01 (aucune salle actuelle n'a plus d'un liquide montant, pas besoin
+   * d'un registre par salle). Remise à niveau sous le joueur à chaque
+   * chargement de salle et à chaque retour à l'encrier (`respawn`).
+   */
+  private hazardY: number | null = null;
   /** Mot actuellement porté par le joueur, et phrase en cours de composition aux consoles — état éphémère, non sauvegardé. */
   private carriedWord: CarriedTransformWord | null = null;
   private transformSlots: { subject: CarriedTransformWord | null; attribute: CarriedTransformWord | null } = {
@@ -327,6 +429,17 @@ export class Game {
    */
   private chapitre01SceneState: 'fighting' | 'defeated' | 'gone' = 'fighting';
   private chapitre01SceneTriggerTime = 0;
+  /**
+   * Cinématique de fin RATURE (demande de Lucas 2026-07-29) : `walking`
+   * pendant que le personnage s'éloigne (`renderEndingWalkAway`), `fadingOut`
+   * pendant le fondu au noir, `done` une fois le texte de clôture affiché
+   * (ou immédiatement si l'issue n'est pas RATURE : POINT FINAL/indécis n'a
+   * pas cette cinématique). Posé par `updateNarration` au moment où la
+   * narration de clôture se referme (pas par `finalizeEnding`, qui peut
+   * tourner bien avant que le joueur ait fini de lire).
+   */
+  private endingSceneState: 'walking' | 'fadingOut' | 'done' = 'done';
+  private endingSceneStartTime = 0;
 
   private player!: PlayerState;
   private enemies: Enemy[] = [];
@@ -336,6 +449,17 @@ export class Game {
   private bossHintShown = false;
   /** Audit narratif 2026-07-26 : présente la peau du mi-boss à l'approche (voir introToast). */
   private bossIntroShown = false;
+  /** Tourelles fixes (crue_01 uniquement, demande de Lucas 2026-07-29). */
+  private turrets: TurretState[] = [];
+  private turretContactCooldown = 0;
+  /**
+   * Effondrement du plafond de `salle_tresor` (demande de Lucas 2026-07-29) :
+   * `collapseActive` passe à `true` au ramassage du trésor (`checkPickups`),
+   * jamais dérivé d'un flag persisté — retourner dans la salle une fois le
+   * trésor déjà pris ne doit pas redéclencher la chute de blocs.
+   */
+  private debrisField: DebrisField = createDebrisField();
+  private collapseActive = false;
   private ink!: InkState;
   private readonly unlocked = new Set<string>();
   private storyFlags: Record<string, boolean | number> = {};
@@ -373,6 +497,8 @@ export class Game {
   private prevGrounded = false;
   private landTimer = 0;
   private prevDashTimer = 0;
+  /** Détecte le FRONT du double saut AILES (0→1) pour le bruitage, même principe que prevDashTimer. */
+  private prevAirJumpsUsed = 0;
 
   // Tracé à la souris : dernière tuile peinte/effacée pour raccorder le trait.
   private lastPaint: TileCoord | null = null;
@@ -391,10 +517,18 @@ export class Game {
     this.dialogues = {
       pnj_marge: parseDialogueData(dialoguePnjMarge),
       pnj_ratures: parseDialogueData(dialoguePnjRatures),
-      pnj_ratures_indice_personnage: parseDialogueData(dialoguePnjRaturesIndicePersonnage),
-      pnj_ratures_indice_bleu: parseDialogueData(dialoguePnjRaturesIndiceBleu),
+      pnj_ratures_indice_ciel: parseDialogueData(dialoguePnjRaturesIndiceCiel),
+      pnj_ratures_indice_rouge: parseDialogueData(dialoguePnjRaturesIndiceRouge),
     };
     this.checkpoint = { x: 0, y: 0 };
+
+    // Musique (demande de Lucas 2026-07-29) : préférence persistante
+    // indépendante des emplacements de sauvegarde (game/settings.ts).
+    const settings = loadJson(this.storage, SETTINGS_KEY, parseSettings) ?? DEFAULT_SETTINGS;
+    this.musicMuted = settings.musicMuted;
+    this.music = new MusicPlayer(musicUrl, MUSIC.baseVolume, this.musicMuted);
+    this.sfx.setMuted(false); // pas de bascule dédiée pour l'instant (demande = couper la musique, pas les bruitages)
+    this.music.tryPlay();
 
     this.loadRoom(DEFAULT_ROOM_ID, true);
 
@@ -433,6 +567,15 @@ export class Game {
       return createEnemy(o.id, kind, o.x, o.y, o.x, Math.max(o.x, o.x + o.width - ENEMY.width));
     });
 
+    this.turrets = this.room.objectsOfType('turret').map((o) => createTurret(o.id, o.x, o.y));
+    this.turretContactCooldown = 0;
+
+    // Effondrement de salle_tresor : jamais actif au chargement, même si le
+    // trésor a déjà été ramassé avant (le danger est lié à l'ACTE de le
+    // ramasser, pas à un flag permanent — revisiter la salle vide est sûr).
+    this.debrisField = createDebrisField();
+    this.collapseActive = false;
+
     const bossObj = this.room.firstObjectOfType('boss');
     this.boss =
       bossObj !== null
@@ -470,6 +613,19 @@ export class Game {
       };
     }
     this.checkpoint = { x: spawn.x, y: spawn.y };
+    // Bug trouvé en vérifiant crue_01 (2026-07-29, capture d'écran de Lucas) :
+    // un mot porté à la chambre des mots (ratures_01) n'était jamais lâché en
+    // changeant de salle — rien ne consomme jamais un mot (D-round16), donc
+    // rien ne le reposait non plus. Le joueur pouvait entrer dans crue_01 en
+    // portant encore « CIEL » (ou tout autre mot), affiché au-dessus de sa
+    // tête sans aucun sens dans cette salle. Un mot/slot ne veut rien dire
+    // hors de la chambre des mots : remis à zéro à chaque changement de salle.
+    this.carriedWord = null;
+    this.transformSlots = { subject: null, attribute: null };
+    // Liquide montant (crue_01 uniquement) : remis à niveau sous le point de
+    // départ, même formule qu'au retour à l'encrier (`respawn`) — voir
+    // `updateHazard`/`RISING_HAZARD.restartOffset`.
+    this.hazardY = roomId === 'crue_01' ? spawn.y + PLAYER.height + RISING_HAZARD.restartOffset : null;
     // Caméra collée instantanément (pas de panoramique visible entre 2 salles).
     this.camera.follow(
       this.player.body.x + this.player.body.w / 2,
@@ -514,6 +670,12 @@ export class Game {
         'Le combat fini, la page se referme derrière toi. Plus loin, les lignes du manuscrit se resserrent en colonnes de pierre, comme un temple, avec une porte au bout.',
       );
     }
+
+    // Liquide montant (crue_01) : cadrage narratif à la première entrée,
+    // reskinné selon le chemin (game/narrative/hazard_flavor.ts). [proposition]
+    if (firstVisit && roomId === 'crue_01') {
+      this.showNarration(resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).introNarration);
+    }
   }
 
   /**
@@ -529,6 +691,12 @@ export class Game {
       const flag = fragment.properties['flag'];
       if (typeof flag === 'string' && this.storyFlags[flag] === true) {
         this.collectedObjects.add(fragment.id);
+      }
+    }
+    for (const treasure of this.room.objectsOfType('treasure')) {
+      const flag = treasure.properties['flag'];
+      if (typeof flag === 'string' && this.storyFlags[flag] === true) {
+        this.collectedObjects.add(treasure.id);
       }
     }
     for (const word of this.room.objectsOfType('word')) {
@@ -710,6 +878,30 @@ export class Game {
       return;
     }
 
+    if (this.titleView === 'options') {
+      if (mouse !== null) {
+        const hit = hitTestOptionsMenu(mouse.x, mouse.y);
+        if (hit !== null) {
+          this.titleSelected = hit;
+          if (this.pointer.leftClicked) {
+            this.activateOptionsMenuOption(hit, 'title');
+            return;
+          }
+        }
+      }
+      if (this.input.wasPressed('up') || this.input.wasPressed('down')) {
+        this.titleSelected = this.titleSelected === 0 ? 1 : 0;
+      }
+      if (this.input.wasPressed('pause')) {
+        this.titleView = 'main';
+        this.titleSelected = 2;
+      }
+      if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
+        this.activateOptionsMenuOption(this.titleSelected, 'title');
+      }
+      return;
+    }
+
     // view === 'load' : uniquement pour charger — pas de risque d'écrasement,
     // les emplacements vides sont simplement ignorés à la sélection.
     if (mouse !== null) {
@@ -745,6 +937,11 @@ export class Game {
   private activateTitleMainOption(index: number): void {
     if (index === 0) {
       this.beginGame(null, null);
+      return;
+    }
+    if (index === 2) {
+      this.titleView = 'options';
+      this.titleSelected = 0;
       return;
     }
     this.titleView = 'load';
@@ -825,11 +1022,26 @@ export class Game {
   // ---------- Update ----------
 
   update(dtSeconds: number): void {
+    // Musique : atténuée (pas coupée) tant que le menu pause est ouvert,
+    // demande de Lucas 2026-07-29 — recalculé à chaque frame plutôt que sur
+    // les seules transitions de mode, pour ne jamais désynchroniser (ex.
+    // retour direct à l'écran-titre depuis la pause, "Quitter").
+    this.music.setDuckFactor(this.mode === 'paused' ? MUSIC.pausedDuckFactor : 1);
     if (this.mode === 'title') {
       this.updateTitleMenu();
       this.input.endFrame();
       this.pointer.endFrame();
       return; // pas de partie en cours : simulation entièrement gelée
+    }
+    if (this.mode === 'ending') {
+      // `this.time` doit continuer d'avancer ici (contrairement à 'title'/
+      // 'paused') : la cinématique RATURE (`renderEndingWalkAway`) calcule sa
+      // progression depuis `endingSceneStartTime` avec `this.time`.
+      this.time += dtSeconds;
+      this.updateEnding();
+      this.input.endFrame();
+      this.pointer.endFrame();
+      return; // le jeu est terminé : rien d'autre à simuler
     }
     if (this.input.wasPressed('pause') && this.mode !== 'dialogue' && this.mode !== 'narration') {
       this.mode = this.mode === 'paused' ? 'playing' : 'paused';
@@ -940,6 +1152,27 @@ export class Game {
       if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
         this.activatePauseSaveSlot();
       }
+    } else if (this.pauseView === 'options') {
+      if (mouse !== null) {
+        const hit = hitTestOptionsMenu(mouse.x, mouse.y);
+        if (hit !== null) {
+          this.pauseSelected = hit;
+          if (this.pointer.leftClicked) {
+            this.activateOptionsMenuOption(hit, 'pause');
+            return;
+          }
+        }
+      }
+      if (this.input.wasPressed('up') || this.input.wasPressed('down')) {
+        this.pauseSelected = this.pauseSelected === 0 ? 1 : 0;
+      }
+      if (this.input.wasPressed('pause')) {
+        this.pauseView = 'menu';
+        this.pauseSelected = 3;
+      }
+      if (this.input.wasPressed('interact') || this.input.wasPressed('jump')) {
+        this.activateOptionsMenuOption(this.pauseSelected, 'pause');
+      }
     } else if (this.input.wasPressed('interact') || this.input.wasPressed('jump') || this.pointer.leftClicked) {
       this.pauseView = 'menu';
     }
@@ -956,11 +1189,40 @@ export class Game {
     } else if (index === 2) {
       this.pauseView = 'powers';
     } else if (index === 3) {
+      this.pauseView = 'options';
+      this.pauseSelected = 0;
+    } else if (index === 4) {
       this.pauseView = 'admin';
       this.pauseSelected = Math.max(0, ADMIN_ROOMS.findIndex((r) => r.id === this.room.id));
     } else {
       this.quitGame();
     }
+  }
+
+  /**
+   * Bascule/retour du menu Options (demande de Lucas 2026-07-29 : « un menu
+   * options pour couper la musique »). Partagé entre l'écran-titre et le
+   * menu pause (`from`) — seul le retour diffère (vers le menu principal du
+   * titre, ou vers le menu pause).
+   */
+  private activateOptionsMenuOption(index: number, from: 'title' | 'pause'): void {
+    if (index === 0) {
+      this.toggleMusicMuted();
+      return;
+    }
+    if (from === 'title') {
+      this.titleView = 'main';
+      this.titleSelected = 2;
+    } else {
+      this.pauseView = 'menu';
+      this.pauseSelected = 3;
+    }
+  }
+
+  private toggleMusicMuted(): void {
+    this.musicMuted = !this.musicMuted;
+    this.music.setMuted(this.musicMuted);
+    saveJson(this.storage, SETTINGS_KEY, { musicMuted: this.musicMuted });
   }
 
   /**
@@ -997,28 +1259,64 @@ export class Game {
     this.loadRoom(roomId, false);
     this.player = { ...this.player, health: PLAYER.maxHealth };
     this.ink = refillInk(this.ink);
-    this.mode = 'playing';
+    // Bug trouvé en vérifiant crue_01 (2026-07-29) : `loadRoom` peut avoir
+    // mis le jeu en mode 'narration' (première visite d'une salle avec un
+    // texte d'arrivée, ex. ratures_01/crue_01) — l'écraser sans condition
+    // ici sautait silencieusement cette narration à chaque téléportation
+    // Admin. Ne repasse en 'playing' que si aucune narration n'a démarré.
+    if (this.mode !== 'narration') this.mode = 'playing';
   }
 
-  /** Recommence la salle courante à son point de départ (PV/encre refaits, pouvoirs conservés). */
   /**
    * Recommence la salle courante à son point de départ (PV/encre refaits,
-   * pouvoirs conservés). Réinitialise aussi les mots-loi de CETTE salle
-   * (barrières/blancs déjà résolus, `rature_jamais`/`nom_ecrit` sur
-   * marge_01) : sans ça, « Recommencer le niveau » repositionnait le joueur
-   * au spawn mais laissait son choix de déviation figé pour de bon, ce qui
-   * ne « réinitialisait pas vraiment » le niveau (retour de Lucas,
-   * 2026-07-28) — recommencer un niveau qui EST ce choix doit permettre de
-   * le refaire. `false` plutôt que `delete` : évite `no-dynamic-delete`, et
-   * `=== true` (partout où ces flags sont lus) traite les deux de façon
-   * identique.
+   * pouvoirs conservés). Réinitialise aussi tout l'état mécanique de CETTE
+   * salle (retour de Lucas 2026-07-29 : « il faut vraiment reset comme si
+   * qu'on venait de rentrer dans le niveau » — signalé sur le robinet de
+   * crue_01, qui restait fermé après un restart ; une première version de
+   * ce correctif, 2026-07-28, ne réinitialisait QUE les mots-loi de
+   * marge_01, ce qui ne « réinitialisait pas vraiment » les autres salles).
+   * Deux catégories de flags :
+   *  - ceux portés par un objet de la salle (`properties.flag` : mots-loi
+   *    canon/blancs, murs BRÈCHE, fioles/cœurs, fragments, trésors) —
+   *    remis à `false` en une seule boucle générique sur tous les objets de
+   *    la salle, plutôt que d'énumérer chaque type un par un.
+   *  - ceux lus/écrits directement dans le code, sans objet porteur (le
+   *    robinet de crue_01, la défaite du mi-boss de chapitre_01, le code du
+   *    temple/les couleurs du monde de ratures_01) — remis à `false`
+   *    explicitement, salle par salle.
+   * Les flags posés par les DIALOGUES (ex. `pnj_ratures_rencontre`) ne sont
+   * volontairement pas touchés ici : catégorie distincte (état de
+   * conversation, pas obstacle mécanique), aucun retour de Lucas ne les
+   * concerne pour l'instant. `false` plutôt que `delete` : évite
+   * `no-dynamic-delete`, et `=== true` (partout où ces flags sont lus)
+   * traite les deux de façon identique.
    */
   private restartLevel(): void {
     const roomId = this.room.id;
-    for (const obj of [...this.canonBarriers, ...this.canonBlanks]) {
+    for (const obj of this.room.map.objects) {
       const flag = obj.properties['flag'];
       if (typeof flag === 'string') this.storyFlags[flag] = false;
     }
+    if (roomId === 'crue_01') {
+      this.storyFlags[CRUE01_VALVE_FLAG] = false;
+    }
+    if (roomId === 'chapitre_01') {
+      this.storyFlags['boss_coquille_majuscule_vaincu'] = false;
+    }
+    if (roomId === 'ratures_01') {
+      for (const t of this.worldTransformations) this.storyFlags[t.flag] = false;
+      this.storyFlags['temple_code_trouve'] = false;
+    }
+    if (roomId === 'marge_01') {
+      this.storyFlags['chapitre1_fini'] = false;
+    }
+    if (roomId === 'salle_tresor') {
+      this.storyFlags['jeu_termine'] = false;
+    }
+    // `content_fin_actuelle` volontairement épargné : simple marqueur méta
+    // "tu as vu tout le contenu actuellement construit" (toast de
+    // développement, pas de la fiction), pas un obstacle à rejouer — le
+    // réafficher à chaque restart de test serait juste bruyant.
     this.loadRoom(roomId, false);
     this.player = { ...this.player, health: PLAYER.maxHealth };
     this.ink = refillInk(this.ink);
@@ -1056,7 +1354,14 @@ export class Game {
     const feet = { x: this.player.body.x + this.player.body.w / 2, y: this.player.body.y + this.player.body.h };
     if (this.input.wasPressed('jump') && wasGrounded) {
       this.burst(feet.x, feet.y, PARTICLES.jumpBurst, PALETTE.sepia, 50);
+      this.sfx.play(SFX.jump);
     }
+    // Double saut AILES : détecté au FRONT (0→1) de airJumpsUsed, même
+    // principe que prevDashTimer ci-dessous — un seul bruitage par saut aérien.
+    if (this.player.airJumpsUsed > this.prevAirJumpsUsed) {
+      this.sfx.play(SFX.doubleJump);
+    }
+    this.prevAirJumpsUsed = this.player.airJumpsUsed;
     if (!this.prevGrounded && this.player.grounded && prevVy > 140) {
       this.landTimer = RENDERING.landSquashSeconds;
       this.burst(feet.x, feet.y, PARTICLES.landBurst, PALETTE.ink, 60);
@@ -1065,13 +1370,27 @@ export class Game {
     this.landTimer = Math.max(0, this.landTimer - dtSeconds);
     if (this.prevDashTimer <= 0 && this.player.dashTimer > 0) {
       this.burst(feet.x, feet.y - this.player.body.h / 2, PARTICLES.drawBurst * 2, PALETTE.ink, 70);
+      this.sfx.play(SFX.dash);
     }
     this.prevDashTimer = this.player.dashTimer;
 
     this.updateEnemies(dtSeconds);
     this.updateBoss(dtSeconds);
+    this.updateHazard(dtSeconds);
+    this.updateTurrets(dtSeconds);
+    this.updateDebris(dtSeconds);
     if (this.player.health <= 0) this.handleDefeat();
-    else if (this.player.body.y + this.player.body.h >= this.room.pixelHeight) this.handleFall();
+    else if (
+      this.hazardY !== null &&
+      isCaughtByHazard(this.player.body.y + this.player.body.h / 2, this.hazardY)
+    ) {
+      // Retour de Lucas 2026-07-29 : rattraper au premier pixel touché « fait
+      // très expéditif » — on ne compte désormais rattrapé qu'à MOITIÉ
+      // submergé (le centre du corps, pas les pieds).
+      this.handleHazardCaught();
+    } else if (this.collapseActive && debrisHitsPlayer(this.debrisField, this.player.body)) {
+      this.handleCrushed();
+    } else if (this.player.body.y + this.player.body.h >= this.room.pixelHeight) this.handleFall();
     this.checkPickups();
     if (this.input.wasPressed('interact')) this.handleInteract();
     if (this.input.wasPressed('respawn')) this.respawn();
@@ -1159,12 +1478,18 @@ export class Game {
     }
 
     const dashActive = this.player.dashTimer > 0;
+    const prevProjectileCount = this.boss.projectiles.length;
 
     let boss = stepBoss(this.boss, this.room.isSolid, dtSeconds, this.player.body, {
       width: this.room.pixelWidth,
       height: this.room.pixelHeight,
     });
     boss = resolveBossDashHit(boss, this.player.body, dashActive);
+    // Bruitage de tir (demande de Lucas 2026-07-29) : détecté par un simple
+    // comptage avant/après plutôt qu'un évènement dédié dans stepBoss (pur,
+    // pas d'effet de bord) — un nouveau projectile suffit à savoir qu'un tir
+    // vient d'avoir lieu ce pas de temps.
+    if (boss.projectiles.length > prevProjectileCount) this.sfx.play(SFX.shoot);
 
     if (this.prevBossPhase !== 'defeated' && boss.phase === 'defeated') {
       this.storyFlags['boss_coquille_majuscule_vaincu'] = true;
@@ -1209,6 +1534,62 @@ export class Game {
     }
 
     this.boss = boss;
+  }
+
+  /**
+   * Fait monter la surface du liquide (crue_01 uniquement) ; ne fait rien
+   * ailleurs. S'arrête pour de bon une fois le robinet/fermoir actionné
+   * (`CRUE01_VALVE_FLAG`, demande de Lucas 2026-07-29).
+   */
+  private updateHazard(dtSeconds: number): void {
+    if (this.hazardY === null || this.storyFlags[CRUE01_VALVE_FLAG] === true) return;
+    this.hazardY = advanceHazard(this.hazardY, dtSeconds, RISING_HAZARD.riseSpeed, TILE_SIZE);
+  }
+
+  /**
+   * Fait avancer les tourelles fixes (crue_01, demande de Lucas 2026-07-29) :
+   * tir visé périodique, destruction par HÂTE (un seul coup), dégâts de
+   * contact des bulles en vol — même anti-spam que le mi-boss
+   * (`turretContactCooldown`, partagé entre toutes les tourelles comme
+   * `bossContactCooldown`).
+   */
+  private updateTurrets(dtSeconds: number): void {
+    if (this.turrets.length === 0) return;
+    this.turretContactCooldown = Math.max(0, this.turretContactCooldown - dtSeconds);
+    const dashActive = this.player.dashTimer > 0;
+    const bounds = { width: this.room.pixelWidth, height: this.room.pixelHeight };
+    const next: TurretState[] = [];
+    for (const turret of this.turrets) {
+      const prevProjectileCount = turret.projectiles.length;
+      let t = stepTurret(turret, dtSeconds, this.player.body, bounds);
+      if (t.projectiles.length > prevProjectileCount) this.sfx.play(SFX.shoot);
+      const wasDestroyed = t.destroyed;
+      t = resolveTurretDashHit(t, this.player.body, dashActive);
+      if (!wasDestroyed && t.destroyed) {
+        this.burst(t.body.x + t.body.w / 2, t.body.y + t.body.h / 2, 10, PALETTE.danger, 60);
+      }
+      const hitResult = resolveTurretProjectileHits(t, this.player.body);
+      t = hitResult.turret;
+      if (hitResult.hits > 0 && this.turretContactCooldown <= 0) {
+        this.player = { ...this.player, health: Math.max(0, this.player.health - TURRET.projectileDamage * hitResult.hits) };
+        this.turretContactCooldown = ENEMY.hitCooldownSeconds;
+        this.burst(this.player.body.x + this.player.body.w / 2, this.player.body.y + this.player.body.h / 2, 8, PALETTE.danger, 45);
+      }
+      next.push(t);
+    }
+    this.turrets = next;
+  }
+
+  /**
+   * Fait avancer l'effondrement du plafond de `salle_tresor` (demande de
+   * Lucas 2026-07-29) : rien tant que le trésor n'a pas été ramassé
+   * (`collapseActive`, posé par `checkPickups`). Points de chute lus depuis
+   * les objets `debris_spawn` de la salle (données de salle, pas en dur).
+   */
+  private updateDebris(dtSeconds: number): void {
+    if (!this.collapseActive) return;
+    const spawnPoints = this.room.objectsOfType('debris_spawn').map((o) => ({ x: o.x, y: o.y }));
+    this.debrisField = stepDebrisField(this.debrisField, dtSeconds, spawnPoints, this.room.pixelHeight);
   }
 
   private updateDialogue(): void {
@@ -1274,9 +1655,9 @@ export class Game {
    * pause que le dialogue, sans locuteur ni choix — `drawNarrationBox`.
    * N'écrase pas une narration déjà en cours (le premier texte va au bout).
    */
-  private showNarration(text: string): void {
+  private showNarration(text: string, onClose?: 'ending'): void {
     if (this.mode === 'narration') return;
-    this.narration = { text, elapsedSeconds: 0 };
+    this.narration = { text, elapsedSeconds: 0, ...(onClose !== undefined ? { onClose } : {}) };
     this.mode = 'narration';
   }
 
@@ -1295,10 +1676,70 @@ export class Game {
         // que de forcer à attendre (convention standard des boîtes de texte).
         active.elapsedSeconds = active.text.length / NARRATION_CHARS_PER_SECOND;
       } else {
+        const onClose = active.onClose;
         this.narration = null;
-        this.mode = 'playing';
+        if (onClose === 'ending') {
+          this.mode = 'ending';
+          // La cinématique (personnage qui s'éloigne, fondu au noir) n'existe
+          // que sur RATURE (demande de Lucas 2026-07-29) ; POINT FINAL/indécis
+          // passe directement à l'écran de fin classique.
+          this.endingSceneState = this.storyFlags['rature_jamais'] === true ? 'walking' : 'done';
+          this.endingSceneStartTime = this.time;
+          // `landTimer` (squash à l'atterrissage) ne se décrémente que dans
+          // `updatePlaying`, jamais appelée en mode 'ending' : sans ce reset,
+          // un atterrissage juste avant la porte resterait figé (squash
+          // visible) pendant toute la marche.
+          this.landTimer = 0;
+        } else {
+          this.mode = 'playing';
+        }
       }
     }
+  }
+
+  /**
+   * Écran de fin. Sur POINT FINAL/indécis (`endingSceneState` déjà `'done'`),
+   * un seul geste possible : retour à l'écran-titre. Sur RATURE, la
+   * cinématique joue d'abord (aucune interaction possible sinon la sauter
+   * d'un geste, comme un texte qu'on affiche d'un coup) avant d'accepter ce
+   * même geste de retour.
+   */
+  private updateEnding(): void {
+    const pressed = this.input.wasPressed('interact') || this.input.wasPressed('jump') || this.pointer.leftClicked;
+    if (this.endingSceneState !== 'done') {
+      if (pressed) {
+        this.endingSceneState = 'done';
+        return;
+      }
+      const elapsed = this.time - this.endingSceneStartTime;
+      if (this.endingSceneState === 'walking') {
+        // Le personnage PRINCIPAL (renderPlayer, pas la silhouette de
+        // l'enfant de marge_01, retour de Lucas 2026-07-29) traverse l'écran
+        // à pied — la simulation est gelée en mode 'ending', donc rien
+        // d'autre ne touche `this.player.body` pendant ce temps.
+        const walkT = Math.min(1, elapsed / ENDING_SCENE.walkSeconds);
+        const cx = ENDING_SCENE.walkStartX + (ENDING_SCENE.walkEndX - ENDING_SCENE.walkStartX) * walkT;
+        this.player = {
+          ...this.player,
+          body: {
+            ...this.player.body,
+            x: cx - this.player.body.w / 2,
+            y: ENDING_SCENE.groundY - this.player.body.h,
+            vx: 0,
+            vy: 0,
+          },
+          facing: 1,
+          grounded: true,
+        };
+        if (elapsed >= ENDING_SCENE.walkSeconds) this.endingSceneState = 'fadingOut';
+      } else if (elapsed >= ENDING_SCENE.walkSeconds + ENDING_SCENE.fadeSeconds) {
+        // Seul l'autre état possible ici (l'état `!== 'done'` englobant est
+        // déjà vérifié plus haut) : forcément 'fadingOut'.
+        this.endingSceneState = 'done';
+      }
+      return;
+    }
+    if (pressed) this.quitGame();
   }
 
   /**
@@ -1594,6 +2035,26 @@ export class Game {
       airJumpsUsed: 0,
     };
     this.ink = refillInk(this.ink);
+    // Retour de Lucas 2026-07-29 : une mort doit remettre le puzzle d'encre
+    // à zéro, pas seulement recharger la réserve — sans ça, un escalier déjà
+    // tracé avant une chute reste utilisable indéfiniment (contourne la
+    // difficulté, surtout dans crue_01 où la course contre la montée en
+    // dépend). Les murs BRÈCHE/canon déjà résolus, eux, restent acquis (pas
+    // touchés ici) : seule l'encre du JOUEUR disparaît.
+    this.room.clearInk();
+    // Liquide montant (crue_01) : remis à niveau sous le point de retour,
+    // quel que soit l'encrier (bas ou mi-parcours) — même formule qu'au
+    // chargement de la salle (`loadRoom`).
+    if (this.hazardY !== null) {
+      this.hazardY = this.checkpoint.y + PLAYER.height + RISING_HAZARD.restartOffset;
+    }
+    // Effondrement de salle_tresor : un échec pendant la course vers la
+    // sortie donne un essai frais (blocs déjà tombés effacés), pas la
+    // continuation d'une chute déjà bien avancée — le trésor reste acquis
+    // (storyFlags non touché ici), seul le défi physique recommence.
+    if (this.room.id === 'salle_tresor' && this.collapseActive) {
+      this.debrisField = createDebrisField();
+    }
     this.bus.emit('player_respawned', { x: this.checkpoint.x, y: this.checkpoint.y });
   }
 
@@ -1614,6 +2075,55 @@ export class Game {
    */
   private handleFall(): void {
     this.failAndRespawn('Le vide du gouffre t\'engloutit : le manuscrit te ramène à l\'encrier.');
+  }
+
+  /**
+   * Rattrapé par le liquide montant (crue_01) : même sévérité que les autres
+   * échecs (retour au dernier encrier), message reskinné selon le chemin
+   * narratif (narrative/hazard_flavor.ts).
+   */
+  private handleHazardCaught(): void {
+    this.failAndRespawn(resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).catchMessage);
+  }
+
+  /**
+   * Écrasé par un bloc du plafond effondré de `salle_tresor` (demande de
+   * Lucas 2026-07-29). PAS `failAndRespawn()`/`respawn()` : ceux-ci
+   * replacent le joueur au dernier `this.checkpoint`, qui est forcément dans
+   * `crue_01` (aucun encrier dans `salle_tresor`) sans jamais changer
+   * `this.room` — le joueur se retrouvait donc téléporté aux coordonnées du
+   * puits tout en restant dans la petite salle-trésor, hors de tout sol
+   * solide, ce qui déclenchait aussitôt `handleFall()` en boucle (bug
+   * signalé par Lucas : « ça nous fait tomber en boucle »). Ici : réapparition
+   * locale au point de départ DE CETTE SALLE, effondrement arrêté et trésor
+   * remis en place (retour de Lucas : « avec le trésor remis en place ») —
+   * il faut recommencer la course depuis le début plutôt que de continuer
+   * une chute déjà entamée.
+   */
+  private handleCrushed(): void {
+    const spawn = this.room.firstObjectOfType('spawn');
+    const x = spawn?.x ?? this.player.body.x;
+    const y = spawn?.y ?? this.player.body.y;
+    this.player = {
+      ...this.player,
+      body: { ...this.player.body, x, y, vx: 0, vy: 0 },
+      grounded: false,
+      health: PLAYER.maxHealth,
+      dashTimer: 0,
+      dashCooldown: 0,
+      airJumpsUsed: 0,
+    };
+    this.ink = refillInk(this.ink);
+    this.collapseActive = false;
+    this.debrisField = createDebrisField();
+    const treasure = this.room.firstObjectOfType('treasure');
+    const flag = treasure?.properties['flag'];
+    if (treasure !== null && typeof flag === 'string') {
+      this.collectedObjects.delete(treasure.id);
+      this.storyFlags[flag] = false;
+    }
+    this.bus.emit('player_respawned', { x, y });
+    this.toast(resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).crushedMessage);
   }
 
   private failAndRespawn(message: string): void {
@@ -1670,6 +2180,32 @@ export class Game {
       const text = fragment.properties['text'];
       this.showNarration(typeof text === 'string' ? `Fragment retrouvé : ${text}` : 'Fragment de page recueilli.');
     }
+    // Trésor de `salle_tresor` (retour de Lucas 2026-07-29, derrière le mur
+    // BRÈCHE tout en haut de crue_01, accessible via porte) : même mécanique
+    // qu'un fragment (ramassage unique, texte affiché en narration), mais un
+    // type dédié plutôt que réutiliser 'fragment' tel quel — le préfixe
+    // « Fragment retrouvé » n'aurait pas de sens pour un trésor, et le texte
+    // change selon le chemin narratif (resolveHazardFlavor) plutôt que
+    // d'être fixe par salle. Dans `salle_tresor` spécifiquement, ramasser le
+    // trésor déclenche aussi l'effondrement du plafond (« le temple
+    // tremble » — retour de Lucas, il faut courir vers la sortie).
+    for (const treasure of this.room.objectsOfType('treasure')) {
+      if (this.collectedObjects.has(treasure.id) || !this.playerOverlaps(treasure)) continue;
+      const flag = treasure.properties['flag'];
+      if (typeof flag !== 'string') continue;
+      this.collectedObjects.add(treasure.id);
+      this.storyFlags[flag] = true;
+      this.burst(treasure.x + treasure.width / 2, treasure.y + treasure.height / 2, 20, PALETTE.danger, 55);
+      this.bus.emit('flag_set', { flag, value: true });
+      const flavor = resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags);
+      if (this.room.id === 'salle_tresor') {
+        this.collapseActive = true;
+        this.debrisField = createDebrisField();
+        this.showNarration(`${flavor.treasureText} ${flavor.collapseMessage}`);
+      } else {
+        this.showNarration(flavor.treasureText);
+      }
+    }
     for (const potion of this.room.objectsOfType('potion')) {
       if (this.collectedObjects.has(potion.id) || !this.playerOverlaps(potion)) continue;
       const flag = potion.properties['flag'];
@@ -1689,7 +2225,7 @@ export class Game {
   private handleInteract(): void {
     const npc = this.room
       .objectsOfType('npc')
-      .find((o) => this.playerOverlaps(o, INTERACT_MARGIN));
+      .find((o) => !this.isNpcHidden(o) && this.playerOverlaps(o, INTERACT_MARGIN));
     if (npc !== undefined) {
       const dialogueId = npc.properties['dialogue'];
       const data = typeof dialogueId === 'string' ? this.dialogues[dialogueId] : undefined;
@@ -1717,6 +2253,25 @@ export class Game {
         this.toast('Repère posé. Échap puis Sauvegarder pour garder ta progression.'); // [proposition]
       } else {
         this.persist('inkwell');
+      }
+      return;
+    }
+
+    // Robinet/fermoir en haut de crue_01 (demande de Lucas 2026-07-29) :
+    // arrête pour de bon la montée du liquide. Message et nom reskinnés
+    // selon le chemin narratif (narrative/hazard_flavor.ts), même mécanique.
+    const valve = this.room.objectsOfType('valve').find((o) => this.playerOverlaps(o, INTERACT_MARGIN));
+    if (valve !== undefined) {
+      if (this.storyFlags[CRUE01_VALVE_FLAG] !== true) {
+        this.storyFlags[CRUE01_VALVE_FLAG] = true;
+        this.bus.emit('flag_set', { flag: CRUE01_VALVE_FLAG, value: true });
+        this.burst(valve.x + valve.width / 2, valve.y + valve.height / 2, 12, PALETTE.unwritten, 45);
+        this.showNarration(resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).stopMessage);
+        // Pas de porte de sortie ici (retour de Lucas 2026-07-29) : le
+        // robinet/fermoir EST le point d'arrivée, donc aussi celui où la fin
+        // du contenu actuellement construit se marque (déplacé depuis
+        // l'ancienne porte_suite).
+        this.finalizeAvailableContent();
       }
       return;
     }
@@ -1814,8 +2369,10 @@ export class Game {
     }
     if (this.storyFlags['rature_jamais'] === true) {
       this.showNarration(`${sentence} Tu l'as écrit, et c'est devenu vrai.`); // [proposition]
-    } else {
+    } else if (transformation.isTempleCode === true) {
       this.showNarration(`${sentence} La phrase était déjà juste : elle n'attendait que d'être retrouvée. La porte s'ouvre.`); // [proposition]
+    } else {
+      this.showNarration(`${sentence} Une phrase vraie, mais pas celle que la porte attend.`); // [proposition]
     }
   }
 
@@ -1842,14 +2399,46 @@ export class Game {
   }
 
   /**
-   * Marque le contenu actuel de ratures_01 comme achevé, une fois la porte du
-   * temple franchie (`porte_temple`, gardée par `isDoorLocked` — déjà ouverte
-   * sur RATURE, sinon par la bonne phrase composée à la chambre des mots).
+   * Marque le contenu actuellement construit comme achevé, une fois la porte
+   * qui le porte franchie (`showsCompletionToast`, propriété Tiled générique
+   * lue par `checkDoors` — désormais la sortie de crue_01, plus porte_temple
+   * de ratures_01 depuis que la zone 4 existe, 2026-07-29).
    */
-  private finalizeRatures01Content(): void {
-    if (this.storyFlags['ratures01_fini'] === true) return;
-    this.storyFlags['ratures01_fini'] = true;
-    this.toast('Fin du contenu actuel : les zones 4 à 6 arriveront dans une prochaine passe.');
+  private finalizeAvailableContent(): void {
+    if (this.storyFlags['content_fin_actuelle'] === true) return;
+    this.storyFlags['content_fin_actuelle'] = true;
+    this.toast('Fin du contenu actuel : les zones 5 et 6 arriveront dans une prochaine passe.');
+  }
+
+  /**
+   * Termine le jeu : la 2e porte de `salle_tresor` (`endsGame`, propriété
+   * Tiled générique lue par `checkDoors`) menait auparavant en boucle vers
+   * `crue_01` ; demande de Lucas (2026-07-29) qu'elle mène plutôt « à
+   * l'extérieur du temple », la vraie fin du contenu construit jusqu'ici.
+   * Même principe que `finalizeChapter1` : l'issue (RATURE/POINT FINAL) se
+   * déduit du flag déjà posé par le joueur en `marge_01`, pas un nouveau
+   * choix. La narration se referme sur l'écran de fin (`showNarration(...,
+   * 'ending')`) plutôt que de rendre la main en jeu — il n'y a plus rien
+   * après cette porte. `jeu_termine` (idempotent) est remis à `false` par
+   * `restartLevel()` dans `salle_tresor`, comme le reste de l'état
+   * mécanique de cette salle.
+   */
+  private finalizeEnding(): void {
+    if (this.storyFlags['jeu_termine'] === true) return;
+    const kind = this.storyFlags['rature_jamais'] === true ? 'rature' : 'point';
+    this.storyFlags['jeu_termine'] = true;
+    this.bus.emit('game_ended', { ending: kind });
+    if (kind === 'rature') {
+      this.showNarration(
+        'Le trésor libère le mot prisonnier du livre. Il n\'appartient plus à personne : libre, il peut enfin écrire sa propre histoire.', // [proposition]
+        'ending',
+      );
+    } else {
+      this.showNarration(
+        'L\'enfant rentre à son village et offre le trésor à son peuple, qui n\'en manque plus jamais. On le couronne bientôt : il devient un roi juste et aimé, et l\'histoire, longtemps incertaine, se termine enfin bien.', // [proposition]
+        'ending',
+      );
+    }
   }
 
   /**
@@ -1881,6 +2470,20 @@ export class Game {
     return !(typeof requiresFlagUnless === 'string' && this.storyFlags[requiresFlagUnless] === true);
   }
 
+  /**
+   * Un PNJ `hiddenIfFlag` disparaît entièrement (rendu ET interaction) une
+   * fois ce flag posé — contrairement aux portes (`isDoorLocked`), il n'y a
+   * pas de version « verrouillée mais visible » pour un PNJ : soit il est
+   * là, soit il n'y est pas. Ajouté pour les 2 PNJ-indice de ratures_01
+   * (retour de Lucas 2026-07-29, « un seul pnj dans cette version [RATURE] »)
+   * — leurs indices ne servent à rien une fois la porte du temple déjà
+   * ouverte, autant ne pas les proposer du tout.
+   */
+  private isNpcHidden(npc: RoomObject): boolean {
+    const hiddenIfFlag = npc.properties['hiddenIfFlag'];
+    return typeof hiddenIfFlag === 'string' && this.storyFlags[hiddenIfFlag] === true;
+  }
+
   private checkDoors(): void {
     if (this.doorCooldown > 0) return;
     const door = this.room.objectsOfType('door').find((o) => this.playerOverlaps(o));
@@ -1901,7 +2504,11 @@ export class Game {
       return;
     }
     if (door.properties['endsChapter'] === 'chapitre1') this.finalizeChapter1();
-    if (door.properties['showsCompletionToast'] === true) this.finalizeRatures01Content();
+    if (door.properties['showsCompletionToast'] === true) this.finalizeAvailableContent();
+    if (door.properties['endsGame'] === true) {
+      this.finalizeEnding();
+      return; // pas de salle cible : cette porte termine le jeu, elle ne mène nulle part
+    }
     const targetRoom = door.properties['targetRoom'];
     const targetX = door.properties['targetX'];
     const targetY = door.properties['targetY'];
@@ -1942,7 +2549,9 @@ export class Game {
     // le menu — ni la géométrie du niveau (murs, PNJ, mots-loi...) ni le
     // décor narratif ponctuel (l'enfant sur la colline, "Il était une
     // fois"...) qui exposeraient un niveau précis plutôt qu'un simple fond.
-    if (this.mode !== 'title') {
+    // Même gating pour l'écran de fin ('ending') : conclusion propre plutôt
+    // que le joueur planté dans la salle aux trésors vide, HUD affiché.
+    if (this.mode !== 'title' && this.mode !== 'ending') {
       this.renderParallaxDecor(ctx);
 
       ctx.save();
@@ -1954,13 +2563,20 @@ export class Game {
       this.renderBossArenaDecor(ctx);
       this.renderMotes(ctx);
       this.renderSlabs(ctx);
+      // Décor mural du puits (crue_01) : APRÈS `renderSlabs` — bug trouvé en
+      // vérifiant visuellement (2026-07-29) : dessiné avant, les dalles de
+      // mur (peintes juste après) le recouvraient entièrement, invisible.
+      this.renderCrueWallDecor(ctx);
       this.renderFiligrane(ctx);
       this.renderInk(ctx);
       this.renderCanon(ctx);
       this.renderBrecheWalls(ctx);
       this.renderObjects(ctx);
+      this.renderHazard(ctx);
       this.renderEnemies(ctx);
       this.renderBoss(ctx);
+      this.renderTurrets(ctx);
+      this.renderDebris(ctx);
       this.renderPlayer(ctx);
       this.renderCarriedWord(ctx);
       this.renderParticles(ctx);
@@ -1998,23 +2614,29 @@ export class Game {
     }
 
     if (this.mode === 'paused') {
-      drawPauseMenu(
-        ctx,
-        this.pauseView,
-        this.pauseSelected,
-        allAbilities(),
-        this.unlocked,
-        LEANING_LINES[resolveLeaning(this.storyFlags)],
-        ADMIN_ROOMS,
-        this.room.id,
-        this.slotDisplays(this.pauseSaveSlots),
-        this.pausePendingOverwriteSlot,
-      );
+      if (this.pauseView === 'options') {
+        drawOptionsMenu(ctx, this.pauseSelected, this.musicMuted);
+      } else {
+        drawPauseMenu(
+          ctx,
+          this.pauseView,
+          this.pauseSelected,
+          allAbilities(),
+          this.unlocked,
+          LEANING_LINES[resolveLeaning(this.storyFlags)],
+          ADMIN_ROOMS,
+          this.room.id,
+          this.slotDisplays(this.pauseSaveSlots),
+          this.pausePendingOverwriteSlot,
+        );
+      }
     }
 
     if (this.mode === 'title') {
       if (this.titleView === 'main') {
         drawTitleMain(ctx, this.titleSelected);
+      } else if (this.titleView === 'options') {
+        drawOptionsMenu(ctx, this.titleSelected, this.musicMuted);
       } else {
         drawSlotList(
           ctx,
@@ -2026,6 +2648,46 @@ export class Game {
           'Échap : retour',
         );
       }
+    }
+
+    if (this.mode === 'ending') {
+      const isRature = this.storyFlags['rature_jamais'] === true;
+      if (isRature && this.endingSceneState !== 'done') {
+        this.renderEndingWalkAway(ctx);
+      } else if (isRature) {
+        drawRatureEndingText(ctx);
+      } else {
+        drawEndingScreen(ctx);
+      }
+    }
+  }
+
+  /**
+   * Cinématique de fin RATURE (demande de Lucas 2026-07-29, corrigée le jour
+   * même : « c'est notre personnage principal, pas l'enfant stickman qui
+   * doit disparaître ») : `renderPlayer` (la même forme qu'en jeu, déjà
+   * repositionnée par `updateEnding` pendant l'état `'walking'`) traverse
+   * l'écran, puis un fondu au noir (`PALETTE.ink`, aucune couleur inventée)
+   * recouvre la scène avant le texte de clôture (`drawRatureEndingText`,
+   * affiché une fois `endingSceneState` à `'done'`, voir `updateEnding`).
+   * Coordonnées en espace vue (pas de `ctx.translate` de caméra actif ici,
+   * contrairement au décor en jeu). Le parchemin peint plus haut dans
+   * `render()` (`this.paper`) est dimensionné à la salle courante
+   * (`salle_tresor` : 416×160) et ne couvre donc pas toute la vue (480×270),
+   * ce qui laissait un bord non peint visible pendant la marche (retour de
+   * Lucas 2026-07-29, « il faut élargir sur toute la surface le fond de page
+   * qu'il y a déjà ») : redessiné ici en l'étirant explicitement sur toute la
+   * vue plutôt que de recréer une texture dédiée à la cinématique.
+   */
+  private renderEndingWalkAway(ctx: CanvasRenderingContext2D): void {
+    ctx.drawImage(this.paper, 0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    this.renderPlayer(ctx);
+
+    if (this.endingSceneState === 'fadingOut') {
+      const elapsed = this.time - this.endingSceneStartTime;
+      const fadeT = Math.min(1, Math.max(0, (elapsed - ENDING_SCENE.walkSeconds) / ENDING_SCENE.fadeSeconds));
+      ctx.fillStyle = hexAlpha(PALETTE.ink, fadeT);
+      ctx.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
     }
   }
 
@@ -2256,6 +2918,170 @@ export class Game {
     const flavor = resolveBossFlavor(this.bossFlavorVariants, this.storyFlags);
     if (flavor.decor === 'hand_quill') this.renderHandQuillDecor(ctx);
     else this.renderCreatureDecor(ctx);
+  }
+
+  /**
+   * Décor mural du puits (crue_01, demande de Lucas 2026-07-29) : motifs
+   * répétés verticalement sur les deux parois du puits PLUS la paroi
+   * lointaine de la salle-trésor en arrière-plan (troisième colonne, ajoutée
+   * au round suivant pour donner un vrai fond, pas seulement des murs),
+   * tuilage vertical (`engine/parallax.ts` — déjà utilisé horizontalement
+   * pour le fond des autres salles, réutilisé ici sur l'axe Y, générique par
+   * construction). Reskinné selon le chemin narratif (même `color` que le liquide,
+   * `hazard_flavor.ts`) : POINT FINAL/indécis → murs de temple égyptien
+   * (hiéroglyphes, silhouette de profil, torches) ; RATURE → marge de
+   * manuscrit ancien (tache d'encre, plume, ligne d'écriture). Défilement
+   * complet (facteur 1, pas de parallaxe) : ces motifs sont sur les VRAIS
+   * murs de la salle, ils doivent bouger avec eux à l'identique (même
+   * raison que `renderBossArenaDecor` ci-dessus, round 27 : la parallaxe
+   * dérive dans les salles hautes).
+   */
+  private renderCrueWallDecor(ctx: CanvasRenderingContext2D): void {
+    if (this.room.id !== 'crue_01') return;
+    const book = resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).color === 'ink';
+    const period = 56;
+    const leftX = 8;
+    // Mur de droite du PUITS (pas du fichier de salle entier) : depuis
+    // l'ajout de la salle-trésor (2026-07-29, extension à droite du même
+    // fichier), `this.room.pixelWidth` couvre aussi cette extension et ne
+    // désigne plus le vrai mur du puits. `CRUE01_SHAFT_WIDTH` doit rester
+    // synchronisé avec `SHAFT_W` de `tools/gen_room_crue01.mjs` (même
+    // principe que `groundY = 496` pour l'arène de chapitre_01 : constante
+    // dédiée à cette salle, vérifiée par un test sur les données réelles).
+    const rightX = CRUE01_SHAFT_WIDTH * TILE_SIZE - 8;
+    // Retour de Lucas 2026-07-29 : « les décos sur les murs très bien mais je
+    // voyais aussi le fond, l'arrière-plan ». Depuis que la salle-trésor est
+    // visible en permanence à droite du puits (le monde entier tient dans la
+    // largeur de vue, la caméra ne défile jamais horizontalement), sa paroi
+    // extérieure lointaine (`this.room.pixelWidth`, qui désigne maintenant
+    // bien le bord du fichier de salle) sert de troisième plan de motifs, vu
+    // en continu pendant toute la montée — plus profond que les deux colonnes
+    // du puits, il donne enfin un vrai arrière-plan plutôt que des murs seuls.
+    const farX = this.room.pixelWidth - 8;
+    for (const i of tileIndicesCovering(this.camera.y, INTERNAL_HEIGHT, period)) {
+      const y = i * period + period / 2;
+      this.drawCrueWallMotif(ctx, leftX, y, i * 2, book);
+      this.drawCrueWallMotif(ctx, rightX, y, i * 2 + 1, book);
+      this.drawCrueWallMotif(ctx, farX, y, i * 2 + 101, book);
+    }
+    // Deux torches fixes encadrant le robinet : marquent l'arrivée (« cœur
+    // du temple/livre », demande de Lucas), indépendantes du tuilage seedé.
+    const valve = this.room.firstObjectOfType('valve');
+    if (valve !== null) {
+      const vy = valve.y + valve.height / 2;
+      this.drawCrueTorch(ctx, valve.x - 10, vy);
+      this.drawCrueTorch(ctx, valve.x + valve.width + 10, vy);
+    }
+  }
+
+  /** Un motif mural parmi 3 (par seed), tiré au sort une fois pour toutes (déterministe, pas de random par frame). */
+  private drawCrueWallMotif(ctx: CanvasRenderingContext2D, cx: number, cy: number, seed: number, book: boolean): void {
+    const r = seededRandom(seed);
+    if (r < 0.18) {
+      this.drawCrueTorch(ctx, cx, cy);
+      return;
+    }
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = hexAlpha(PALETTE.ink, 0.3);
+    ctx.fillStyle = hexAlpha(PALETTE.ink, 0.22);
+    ctx.lineWidth = 1;
+    if (book) {
+      if (r < 0.55) {
+        // Tache d'encre : 3 ronds superposés, irréguliers.
+        for (const [ox, oy, rad] of [
+          [0, 0, 3.4],
+          [-2, 1.4, 2],
+          [2, -1, 2.1],
+        ] as const) {
+          ctx.beginPath();
+          ctx.arc(ox, oy, rad, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (r < 0.8) {
+        // Plume : hampe oblique + 2 barbes + goutte d'encre à la pointe.
+        ctx.beginPath();
+        ctx.moveTo(-4, 4);
+        ctx.lineTo(4, -4);
+        ctx.stroke();
+        for (let i = 0; i < 2; i++) {
+          const t = -2 + i * 2.6;
+          ctx.beginPath();
+          ctx.moveTo(t, 2 - i * 2.6);
+          ctx.lineTo(t - 1.6, 2 - i * 2.6 + 1.6);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(4, -4, 1, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Ligne d'écriture, un seul trait ondulé.
+        ctx.beginPath();
+        ctx.moveTo(-5, 0);
+        ctx.quadraticCurveTo(-2, -2.4, 0, 0);
+        ctx.quadraticCurveTo(2, 2.4, 5, 0);
+        ctx.stroke();
+      }
+    } else {
+      if (r < 0.5) {
+        // Ankh : boucle + croix.
+        ctx.beginPath();
+        ctx.arc(0, -3, 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -1);
+        ctx.lineTo(0, 5);
+        ctx.moveTo(-3, 1);
+        ctx.lineTo(3, 1);
+        ctx.stroke();
+      } else if (r < 0.8) {
+        // Silhouette de profil : tête, torse, un bras plié, deux jambes.
+        ctx.beginPath();
+        ctx.arc(0, -4, 1.6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -2.4);
+        ctx.lineTo(0, 3);
+        ctx.moveTo(0, -1);
+        ctx.lineTo(2.6, -2.6);
+        ctx.moveTo(0, 3);
+        ctx.lineTo(-2, 6);
+        ctx.moveTo(0, 3);
+        ctx.lineTo(2, 6);
+        ctx.stroke();
+      } else {
+        // Hiéroglyphe de l'eau : 3 lignes ondulées empilées.
+        for (let i = 0; i < 3; i++) {
+          const y0 = -3 + i * 2.6;
+          ctx.beginPath();
+          ctx.moveTo(-4, y0);
+          ctx.quadraticCurveTo(-1, y0 - 1.4, 2, y0);
+          ctx.quadraticCurveTo(3, y0 + 0.6, 4, y0);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Torche murale (ou bougie côté livre) : hampe fixe + flamme qui vacille avec `this.time`. */
+  private drawCrueTorch(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.strokeStyle = hexAlpha(PALETTE.ink, 0.4);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, -2);
+    ctx.lineTo(0, 6);
+    ctx.stroke();
+    const flicker = 0.6 + 0.4 * Math.sin(this.time * 5 + cx * 0.3);
+    ctx.fillStyle = hexAlpha(PALETTE.danger, 0.3 * flicker + 0.2);
+    ctx.beginPath();
+    ctx.moveTo(0, -3);
+    ctx.quadraticCurveTo(2.6, -6 - flicker * 1.5, 0, -9 - flicker * 2);
+    ctx.quadraticCurveTo(-2.6, -6 - flicker * 1.5, 0, -3);
+    ctx.fill();
+    ctx.restore();
   }
 
   /**
@@ -2749,7 +3575,7 @@ export class Game {
       ctx.textBaseline = 'middle';
       ctx.fillText('▢', blank.x + blank.width / 2, blank.y + blank.height / 2);
       ctx.textBaseline = 'alphabetic';
-      this.renderCanonHint(ctx, blank, 'trace ton encre ici');
+      this.renderCanonHint(ctx, blank, 'trace ton encre ici pour valider la phrase');
     }
   }
 
@@ -2916,6 +3742,40 @@ export class Game {
     ctx.restore();
   }
 
+  /**
+   * Surface du liquide montant (crue_01 uniquement) : dalle translucide du
+   * niveau jusqu'au bas de la salle, ligne du dessus ondulée en continu
+   * (`this.time`, pas un zigzag figé comme `renderCrack` — un liquide bouge
+   * sans cesse). Couleur reskinnée selon le chemin narratif (encre = RATURE,
+   * non-écrit = POINT FINAL/indécis, narrative/hazard_flavor.ts) — aucune
+   * couleur inventée, les deux viennent de la palette existante.
+   */
+  private renderHazard(ctx: CanvasRenderingContext2D): void {
+    if (this.hazardY === null) return;
+    const color = resolveHazardFlavor(this.hazardFlavorVariants, this.storyFlags).color === 'ink'
+      ? PALETTE.ink
+      : PALETTE.unwritten;
+    const top = this.hazardY;
+    // Bornée à la largeur du PUITS (pas `this.room.pixelWidth`, qui couvre
+    // aussi le corridor de la salle-trésor depuis son ajout, 2026-07-29) :
+    // ce corridor est un compartiment séparé du puits (mur plein entre les
+    // deux hors du point faible BRÈCHE), l'eau n'a pas à s'y afficher.
+    const width = CRUE01_SHAFT_WIDTH * TILE_SIZE;
+    ctx.fillStyle = hexAlpha(color, RISING_HAZARD.fillAlpha);
+    ctx.fillRect(0, top, width, this.room.pixelHeight - top);
+
+    ctx.strokeStyle = hexAlpha(color, RISING_HAZARD.strokeAlpha);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const step = 8;
+    for (let x = 0; x <= width; x += step) {
+      const wave = Math.sin(x * 0.05 + this.time * RISING_HAZARD.waveHz * Math.PI * 2) * RISING_HAZARD.waveAmplitude;
+      if (x === 0) ctx.moveTo(x, top + wave);
+      else ctx.lineTo(x, top + wave);
+    }
+    ctx.stroke();
+  }
+
   private renderObjects(ctx: CanvasRenderingContext2D): void {
     for (const word of this.room.objectsOfType('word')) {
       if (this.collectedObjects.has(word.id)) continue;
@@ -2935,6 +3795,13 @@ export class Game {
     for (const fragment of this.room.objectsOfType('fragment')) {
       if (this.collectedObjects.has(fragment.id)) continue;
       this.renderFragment(ctx, fragment);
+    }
+
+    // Trésor de crue_01 : même rendu générique que `renderFragment` (halo +
+    // losange pulsant), rien de spécifique à dessiner en plus.
+    for (const treasure of this.room.objectsOfType('treasure')) {
+      if (this.collectedObjects.has(treasure.id)) continue;
+      this.renderFragment(ctx, treasure);
     }
 
     for (const potion of this.room.objectsOfType('potion')) {
@@ -2967,6 +3834,28 @@ export class Game {
       this.renderInteractHint(ctx, inkwell);
     }
 
+    // Robinet/fermoir (crue_01) : arrête pour de bon la montée du liquide.
+    // Une seule forme (levier + molette), quel que soit le chemin — seul le
+    // texte affiché à l'interaction change (narrative/hazard_flavor.ts).
+    // Grisé une fois actionné, pour que ce soit visuellement réglé.
+    for (const valve of this.room.objectsOfType('valve')) {
+      const used = this.storyFlags[CRUE01_VALVE_FLAG] === true;
+      const cx = valve.x + valve.width / 2;
+      const cy = valve.y + valve.height / 2;
+      ctx.strokeStyle = used ? hexAlpha(PALETTE.sepia, 0.4) : PALETTE.ink;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, valve.width / 2 - 1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - valve.width / 2 + 2, cy);
+      ctx.lineTo(cx + valve.width / 2 - 2, cy);
+      ctx.moveTo(cx, cy - valve.width / 2 + 2);
+      ctx.lineTo(cx, cy + valve.width / 2 - 2);
+      ctx.stroke();
+      if (!used) this.renderInteractHint(ctx, valve);
+    }
+
     // Portes entre salles : dalle pleine + baie en dégradé "non-écrit". Une
     // porte verrouillée (`requiresFlag` non satisfait, retour de playtest
     // 2026-07-26) reste sépia pleine au lieu de la baie accueillante : elle
@@ -2994,6 +3883,7 @@ export class Game {
     }
 
     for (const npc of this.room.objectsOfType('npc')) {
+      if (this.isNpcHidden(npc)) continue;
       const bob = Math.sin(this.time * 1.6) * 1.2;
       ctx.shadowColor = RENDERING.shadowColor;
       ctx.shadowBlur = RENDERING.shadowBlur;
@@ -3271,6 +4161,77 @@ export class Game {
       ctx.beginPath();
       ctx.arc(p.x - 1.5, p.y + wobble - 1.5, 1.2, 0, Math.PI * 2);
       ctx.fill();
+    }
+  }
+
+  /**
+   * Tourelles fixes (crue_01) : socle encastré dans le mur + une lentille qui
+   * s'éclaire juste avant le tir (télégraphe minimal, `cooldown` déjà connu,
+   * pas de nouvel état). Détruite : rendue grisée, silencieuse. Bulles en vol
+   * dans le même style que celles du mi-boss (halo + cœur + reflet).
+   */
+  private renderTurrets(ctx: CanvasRenderingContext2D): void {
+    for (const turret of this.turrets) {
+      const cx = turret.body.x + turret.body.w / 2;
+      const cy = turret.body.y + turret.body.h / 2;
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
+      ctx.fillStyle = turret.destroyed ? hexAlpha(PALETTE.sepia, 0.35) : PALETTE.sepia;
+      ctx.beginPath();
+      ctx.roundRect(turret.body.x, turret.body.y, turret.body.w, turret.body.h, 3);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      if (!turret.destroyed) {
+        const charging = turret.cooldown < 0.3;
+        const pulse = charging ? 0.6 + 0.4 * Math.sin(this.time * 20) : 0.4;
+        ctx.fillStyle = hexAlpha(PALETTE.danger, pulse);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const p of turret.projectiles) {
+        const wobble = Math.sin(this.time * 6 + p.x * 0.1) * 1.2;
+        ctx.fillStyle = hexAlpha(PALETTE.danger, 0.35);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y + wobble, TURRET.projectileRadius + 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = PALETTE.danger;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y + wobble, TURRET.projectileRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = hexAlpha(PALETTE.parchment, 0.5);
+        ctx.beginPath();
+        ctx.arc(p.x - 1.5, p.y + wobble - 1.5, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  /** Blocs de plafond en chute (salle_tresor, demande de Lucas 2026-07-29) : silhouette anguleuse simple, pas de forme inventée fantaisiste. */
+  private renderDebris(ctx: CanvasRenderingContext2D): void {
+    const r = FALLING_DEBRIS.width / 2;
+    for (const piece of this.debrisField.pieces) {
+      ctx.save();
+      ctx.translate(piece.x, piece.y);
+      ctx.rotate(piece.id * 0.7);
+      ctx.shadowColor = RENDERING.shadowColor;
+      ctx.shadowBlur = RENDERING.shadowBlur;
+      ctx.fillStyle = PALETTE.sepia;
+      ctx.beginPath();
+      ctx.moveTo(-r, -r * 0.4);
+      ctx.lineTo(-r * 0.3, -r);
+      ctx.lineTo(r * 0.6, -r * 0.7);
+      ctx.lineTo(r, r * 0.2);
+      ctx.lineTo(r * 0.4, r);
+      ctx.lineTo(-r * 0.6, r * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = hexAlpha(PALETTE.ink, 0.3);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
     }
   }
 

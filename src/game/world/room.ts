@@ -179,6 +179,16 @@ export class Room {
     this.ink.delete(key(tileX, tileY));
   }
 
+  /**
+   * Efface tout le tracé du joueur d'un coup (retour de Lucas 2026-07-29,
+   * appelé à chaque réapparition) : une mort remet le puzzle d'encre à zéro
+   * plutôt que de laisser un escalier déjà tracé, cohérent avec l'encre
+   * elle-même remboursée au plein (`refillInk`, `game.ts` respawn()).
+   */
+  clearInk(): void {
+    this.ink.clear();
+  }
+
   /** Dalles d'encre fusionnées (pour un rendu en formes continues arrondies). */
   inkSlabs(): TileRect[] {
     return mergeSolidTiles(this.map.widthTiles, this.map.heightTiles, (x, y) => this.hasInk(x, y));

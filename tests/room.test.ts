@@ -75,6 +75,16 @@ describe('Room — couche d\'encre tracée', () => {
     const slabs = room.inkSlabs();
     expect(slabs).toEqual([{ x: 0, y: 0, w: 3, h: 1 }]);
   });
+
+  it('clearInk() efface tout le tracé d\'un coup, sans toucher au décor naturel', () => {
+    const room = makeRoom();
+    room.paintInk(0, 0);
+    room.paintInk(1, 0);
+    room.clearInk();
+    expect(room.hasInk(0, 0)).toBe(false);
+    expect(room.hasInk(1, 0)).toBe(false);
+    expect(room.isSolid(1, 2)).toBe(true); // sol naturel, inchangé
+  });
 });
 
 describe('Room — murs BRÈCHE et filigrane', () => {

@@ -1,0 +1,18 @@
+{
+  "id": "pnj_ratures_indice_ciel",
+  "start": "intro",
+  "startVariants": [
+    { "when": { "rature_jamais": true }, "start": "rature_intro" }
+  ],
+  "_comment": "[proposition narration, à valider avec Lucas]. PNJ-indice, perché sur une plateforme en hauteur (retour de Lucas 2026-07-29 : atteindre ces PNJ doit exiger de se tracer ses propres plateformes d'encre). Donne un indice sur le SUJET du code (« ciel ») sans le nommer — code passé de « personnage »/« bleu » à « ciel »/« rouge » le 2026-07-29 (2e retour du jour, « soleil jaune » puis « personnage bleu » jugés trop devinables). Élimination des 3 autres sujets (personnage, page, soleil) plutôt qu'un trait distinctif trop direct. Sur RATURE, ce PNJ n'apparaît même plus (hiddenIfFlag) : un seul PNJ sur cette voie.",
+  "nodes": {
+    "intro": {
+      "speaker": "Le Griffonnage",
+      "text": "Ce n'est pas le personnage : il choisit trop de choses pour être ça. Ce n'est pas la page : elle ne fait que recevoir. Ce n'est même pas ce qui brille et se couche chaque soir. Regarde plutôt ce qui reste, immense, au-dessus de tout, quoi qu'il arrive."
+    },
+    "rature_intro": {
+      "speaker": "Le Griffonnage",
+      "text": "Toi, tu n'as pas besoin de mes indices. Ta porte te reconnaît déjà."
+    }
+  }
+}

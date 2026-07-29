@@ -104,10 +104,10 @@ describe('data/chapters/ratures_01.json — toutes les combinaisons sont prévue
     for (const t of transformations) expect(t.target).toBe(t.subjectId);
   });
 
-  it('exactement une combinaison est marquée isTempleCode (le code du temple, retour de Lucas 2026-07-29 : "personnage devint bleu", moins évident que l\'ancien "soleil devint jaune")', () => {
+  it('exactement une combinaison est marquée isTempleCode (le code du temple, 2e changement le 2026-07-29 : "ciel devint rouge", remplace "personnage devint bleu" jugé encore trop devinable)', () => {
     const codeEntries = transformations.filter((t) => t.isTempleCode === true);
     expect(codeEntries).toHaveLength(1);
-    expect(codeEntries[0]?.subjectId).toBe('personnage');
-    expect(codeEntries[0]?.attributeId).toBe('bleu');
+    expect(codeEntries[0]?.subjectId).toBe('ciel');
+    expect(codeEntries[0]?.attributeId).toBe('rouge');
   });
 });

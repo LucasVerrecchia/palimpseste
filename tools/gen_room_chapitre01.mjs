@@ -19,23 +19,27 @@
  * le sol, comme avant — sa fissure doit couvrir tout le mur pour enseigner
  * le principe sans ambiguïté, pas de grimpe obligatoire pour LUI.
  *
- * Retravaillé le 2026-07-29 (nouveau retour de Lucas, en 2 passes le même
- * jour) : les 2 murs BRÈCHE « points faibles » de l'arène ne sont plus deux
- * colonnes verticales identiques. Le premier (x=56) n'est désormais cassable
- * que dans sa partie HAUTE (au-dessus de `GAUNTLET_SPLIT_ROW`) — sa base
- * reste un mur ordinaire, jamais cassable (avant, toute la colonne l'était,
- * la fissure n'étant qu'une restriction visuelle). Le second devient un
- * plafond HORIZONTAL posé pile à cette même hauteur, juste après le premier :
- * il bloque TOUTE la longueur du corridor à cette hauteur (x=57 à 67), mais
- * seule sa partie fragile (`GAUNTLET_WALL2_WEAK_X0` à `GAUNTLET_WALL2_X1`),
- * loin du mur 1 plutôt que juste après, est réellement cassable — le reste
- * du plafond est un plafond ordinaire, il faut voyager le long (encre) pour
- * trouver le point faible. Il faut donc grimper (encre) jusqu'à
- * `GAUNTLET_SPLIT_ROW`, PUIS chercher la partie fragile du plafond, avant de
- * pouvoir casser l'un ou l'autre mur : plus de passage possible à hauteur du
- * sol (`registerBrecheWall`/`revealFiligrane`, room.ts, restent inchangés,
+ * Retravaillé le 2026-07-29 (retour de Lucas, en 3 passes le même jour) : les
+ * 2 murs BRÈCHE « points faibles » de l'arène ne sont plus deux colonnes
+ * verticales identiques. Le premier (x=56) n'est désormais cassable que dans
+ * sa partie HAUTE (au-dessus de `GAUNTLET_SPLIT_ROW`) — sa base reste un mur
+ * ordinaire, jamais cassable (avant, toute la colonne l'était, la fissure
+ * n'étant qu'une restriction visuelle). Le second devient un plafond
+ * HORIZONTAL posé pile à cette même hauteur, juste après le premier : il
+ * bloque TOUTE la longueur restante du corridor à cette hauteur (x=57 à
+ * W-2), mais seule sa partie fragile tout au bout (`GAUNTLET_WALL2_WEAK_X0`
+ * à `GAUNTLET_WALL2_X1`) est réellement cassable — le reste du plafond est
+ * un plafond ordinaire, il faut voyager le long (encre) pour trouver le
+ * point faible. Il faut donc grimper (encre) jusqu'à `GAUNTLET_SPLIT_ROW`,
+ * PUIS chercher la partie fragile du plafond, avant de pouvoir casser l'un
+ * ou l'autre mur : plus de passage possible à hauteur du sol
+ * (`registerBrecheWall`/`revealFiligrane`, room.ts, restent inchangés,
  * tout-ou-rien par objet comme depuis toujours — seule la géométrie des
- * objets change ici).
+ * objets change ici). 3e passe (retour de Lucas sur la 2e) : un plafond en
+ * HAUTEUR avait été ajouté au-dessus du mur 2 pour empêcher de le survoler
+ * par le haut — mauvaise lecture du retour, ça bloquait aussi le passage
+ * normal par en dessous. Retiré ; seule la LONGUEUR du plafond (x=57 à W-2
+ * au lieu de x=57 à 67) a changé, comme demandé.
  *
  *   porte (retour La Marge) → mur à franchir en s'y traçant des plateformes
  *   d'encre (PLUME) → Coquille + Rature → mur BRÈCHE simple (la salle
@@ -137,17 +141,19 @@ solid(68, ROW(9), 72, ROW(9));
 //     était cassable depuis le sol.
 //   - Mur 2 : n'est plus une colonne verticale mais un plafond HORIZONTAL,
 //     posé pile à GAUNTLET_SPLIT_ROW, juste après le mur 1. Retravaillé une
-//     deuxième fois (retour de Lucas 2026-07-29, même jour) : il doit
-//     bloquer TOUTE la longueur du corridor à cette hauteur (x=57 à 67,
-//     jusqu'à l'entrée de l'arène du mi-boss), pas seulement une bande —
-//     mais seule sa partie fragile, plus loin (près de l'arène, PAS juste
-//     après le mur 1), est réellement cassable (voir l'objet BRÈCHE plus
-//     bas, qui ne couvre que cette partie). Le reste du plafond (x=57 à 64)
-//     est un plafond ordinaire, jamais cassable — il faut donc voyager
-//     le long de ce plafond (encre) pour trouver le point faible.
+//     3e fois (retour de Lucas 2026-07-29 sur la 2e passe : « je parlais
+//     juste du second mur horizontal, c'est lui qui devrait être sur toute
+//     la longueur (pas la hauteur) » — la 2e passe avait ajouté un plafond
+//     en HAUTEUR au-dessus du mur 2, ce qui bloquait tout passage, y compris
+//     le chemin normal par en dessous : retiré). Le plafond s'étend
+//     maintenant sur (presque) toute la longueur restante du corridor
+//     (x=57 à W-2), avec sa partie fragile tout au bout plutôt qu'à
+//     mi-chemin — le reste (x=57 à 79) est un plafond ordinaire, jamais
+//     cassable, il faut donc voyager le long de ce plafond (encre) pour
+//     trouver le point faible, désormais plus loin qu'avant.
 const GAUNTLET_WALL2_X0 = 57;
-const GAUNTLET_WALL2_X1 = 67;
-const GAUNTLET_WALL2_WEAK_X0 = 65;
+const GAUNTLET_WALL2_X1 = W - 2;
+const GAUNTLET_WALL2_WEAK_X0 = GAUNTLET_WALL2_X1 - 2;
 solid(56, 0, 56, H - 1);
 solid(GAUNTLET_WALL2_X0, GAUNTLET_SPLIT_ROW, GAUNTLET_WALL2_X1, GAUNTLET_SPLIT_ROW);
 
@@ -182,9 +188,11 @@ const objects = [
     id: id(), name: 'mot_hate', type: 'word', x: 6 * TILE, y: Y(200), width: 16, height: 16,
     properties: [prop('ability', 'string', 'hate')],
   },
-  // Encrier, juste après le premier mur (celui qu'on franchit en s'y traçant
-  // des plateformes d'encre).
-  { id: id(), name: 'encrier_chapitre1', type: 'inkwell', x: 16 * TILE, y: Y(200), width: 16, height: 24 },
+  // Retour de Lucas 2026-07-29 : « avant le pouvoir brèche il y a deux
+  // encriers, on va garder que celui à côté du pouvoir brèche » — l'encrier
+  // qui était ici (juste après le premier mur, avant même HÂTE) est retiré ;
+  // seul `encrier_chapitre1_puits` (juste avant le puits d'escalade,
+  // ci-dessous) reste.
 
   {
     id: id(), name: 'mot_breche', type: 'word', x: 33 * TILE, y: Y(200), width: 16, height: 16,

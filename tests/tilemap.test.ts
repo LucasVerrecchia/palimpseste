@@ -5,6 +5,8 @@ import { objectTiles } from '../src/game/narrative/deviation';
 import marge01 from '../src/data/rooms/marge_01.json';
 import chapitre01 from '../src/data/rooms/chapitre_01.json';
 import ratures01 from '../src/data/rooms/ratures_01.json';
+import crue01 from '../src/data/rooms/crue_01.json';
+import salleTresor from '../src/data/rooms/salle_tresor.json';
 
 function minimalMap(): Record<string, unknown> {
   return {
@@ -367,6 +369,17 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(wall2ColStart - col1).toBeGreaterThan(wall2Width * 2);
   });
 
+  it('le plafond horizontal (mur 2) s\'étend sur (presque) toute la longueur restante du corridor, jusqu\'au bord de la salle (retour de Lucas 2026-07-29, 3e passe : "c\'est lui qui devrait être sur toute la longueur, pas la hauteur")', () => {
+    const wall2 = map.objects.find((o) => o.name === 'mur_breche_gauntlet_2');
+    const wall2ColEnd = Math.floor((wall2?.x ?? 0) / 16) + Math.floor((wall2?.width ?? 0) / 16) - 1;
+    // Le plafond (calque "ground", pas seulement l'objet BRÈCHE) va bien
+    // jusqu'au bord jouable de la salle (W-2), pas juste jusqu'à l'ancienne
+    // limite (x=67) — c'est la LONGUEUR qui a changé, pas une nouvelle
+    // contrainte de hauteur (un plafond en hauteur ajouté puis retiré la
+    // passe précédente bloquait à tort le passage normal par en dessous).
+    expect(wall2ColEnd).toBe(map.widthTiles - 2);
+  });
+
   it('casser n\'importe quel mur BRÈCHE ne perce jamais le sol (régression : une Rature en poursuite tombait dans le trou et restait bloquée)', () => {
     const walls = map.objects.filter((o) => o.type === 'breche_wall');
     expect(walls.length).toBeGreaterThan(0);
@@ -391,11 +404,13 @@ describe('salle chapitre_01 — blockout mécanique Phase 2 (D13, données réel
     expect(map.objects.some((o) => o.type === 'canon')).toBe(false);
   });
 
-  it('offre deux encriers avant l\'arène du mi-boss (D16 : un après le premier mur, un avant le puits d\'escalade)', () => {
+  it('offre un seul encrier avant l\'arène du mi-boss, juste avant le puits d\'escalade (retour de Lucas 2026-07-29 : il y en avait deux, n\'en garder qu\'un, celui à côté du pouvoir BRÈCHE)', () => {
     const inkwells = map.objects.filter((o) => o.type === 'inkwell');
     const boss = map.objects.find((o) => o.type === 'boss');
-    expect(inkwells).toHaveLength(2);
-    for (const inkwell of inkwells) expect(inkwell.x).toBeLessThan(boss?.x ?? 0);
+    const brecheWord = map.objects.find((o) => o.type === 'word' && o.properties['ability'] === 'breche');
+    expect(inkwells).toHaveLength(1);
+    expect(inkwells[0]?.x).toBeLessThan(boss?.x ?? 0);
+    expect(Math.abs((inkwells[0]?.x ?? 0) - (brecheWord?.x ?? 0))).toBeLessThan(64);
   });
 
   it('offre un mot-pouvoir pour chacun des 2 pouvoirs restants (D16 : AILES retiré), avant son obstacle', () => {
@@ -483,20 +498,53 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (AILES, chambre des mots
     for (const obj of chamberObjects) expect(npc?.x ?? 0).toBeLessThan(obj.x);
   });
 
-  it('2 PNJ-indice (retour de Lucas 2026-07-29), avant La Rature qui regrette, à des hauteurs différentes (retravaillé le même jour : plateformes, pas alignés au sol)', () => {
+  it('2 PNJ-indice (retour de Lucas 2026-07-29, retravaillé une 3e fois le même jour), avant La Rature qui regrette, sur des plateformes hors de portée sans encre, masqués sur RATURE', () => {
     const npcs = map.objects.filter((o) => o.type === 'npc');
-    const personnage = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_personnage');
-    const bleu = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_bleu');
+    const ciel = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_ciel');
+    const rouge = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_rouge');
     const rature = npcs.find((o) => o.properties['dialogue'] === 'pnj_ratures');
-    expect(personnage).toBeDefined();
-    expect(bleu).toBeDefined();
-    expect(personnage?.x ?? 0).toBeLessThan(rature?.x ?? 0);
-    expect(bleu?.x ?? 0).toBeLessThan(rature?.x ?? 0);
-    // Ni l'un ni l'autre au sol (row14*16=224) : les deux perchés sur une
-    // plateforme, à des hauteurs distinctes l'une de l'autre.
-    expect(personnage?.y ?? 0).toBeLessThan(200);
-    expect(bleu?.y ?? 0).toBeLessThan(200);
-    expect(personnage?.y).not.toBe(bleu?.y);
+    expect(ciel).toBeDefined();
+    expect(rouge).toBeDefined();
+    expect(ciel?.x ?? 0).toBeLessThan(rature?.x ?? 0);
+    expect(rouge?.x ?? 0).toBeLessThan(rature?.x ?? 0);
+    // Masqués sur RATURE (demande de Lucas : « un seul pnj dans cette
+    // version ») — La Rature qui regrette n'a pas cette propriété.
+    expect(ciel?.properties['hiddenIfFlag']).toBe('rature_jamais');
+    expect(rouge?.properties['hiddenIfFlag']).toBe('rature_jamais');
+    expect(rature?.properties['hiddenIfFlag']).toBeUndefined();
+    // Ni l'un ni l'autre au sol (row14*16=224), à des hauteurs distinctes.
+    expect(ciel?.y ?? 0).toBeLessThan(200);
+    expect(rouge?.y ?? 0).toBeLessThan(200);
+    expect(ciel?.y).not.toBe(rouge?.y);
+    // Nettement au-delà du maximum vertical atteignable sans encre (retour
+    // de Lucas 2026-07-29 : il faut être obligé de construire des
+    // plateformes) — saut simple (~57px) + AILES (~47px) ≈ 105px max, donc
+    // une plateforme dont la surface est à plus de 105px au-dessus du sol
+    // (y < 224 - 105 = 119) est hors de portée sans peindre au moins un
+    // palier intermédiaire.
+    expect(ciel?.y ?? 999).toBeLessThan(119);
+    expect(rouge?.y ?? 999).toBeLessThan(119);
+  });
+
+  it('aucun escalier construit ne mène aux plateformes des PNJ-indice (doivent être atteintes en traçant de l\'encre, retour de Lucas 2026-07-29)', () => {
+    // Sous chaque plateforme (jusqu'au sol, row14), aucune tuile solide à sa
+    // colonne : un pur puits vertical, pas de marche intermédiaire. Repère la
+    // plateforme réelle en cherchant la première rangée solide sous chaque
+    // PNJ-indice, plutôt que de recalculer sa hauteur depuis npc.y (offset
+    // par la hauteur du sprite, pas directement comparable à une rangée).
+    const ciel = map.objects.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_ciel');
+    const rouge = map.objects.find((o) => o.properties['dialogue'] === 'pnj_ratures_indice_rouge');
+    for (const npc of [ciel, rouge]) {
+      const col = Math.floor((npc?.x ?? 0) / 16);
+      let platformBottomRow = -1;
+      for (let ty = 0; ty < 14; ty++) {
+        if (gidAt(map, col, ty) > 0) platformBottomRow = ty;
+      }
+      expect(platformBottomRow).toBeGreaterThan(0);
+      for (let ty = platformBottomRow + 1; ty < 14; ty++) {
+        expect(gidAt(map, col, ty)).toBe(0);
+      }
+    }
   });
 
   it('offre le mot-pouvoir AILES avant le gouffre qu\'il permet de franchir (D16 : migration jamais faite jusqu\'ici)', () => {
@@ -556,13 +604,332 @@ describe('salle ratures_01 — zone 3 « Les Ratures » (AILES, chambre des mots
     expect(new Set(panels.map((p) => p.properties['role']))).toEqual(new Set(['validate', 'cancel']));
   });
 
-  it('la porte du temple est déjà ouverte sur RATURE (requiresFlagUnless) mais requiert la bonne phrase sinon, porte le toast de fin, et se trouve après tous les mots/consoles', () => {
+  it('la porte du temple est déjà ouverte sur RATURE (requiresFlagUnless) mais requiert la bonne phrase sinon, mène à la zone 4 (crue_01), et se trouve après tous les mots/consoles', () => {
     const door = map.objects.find((o) => o.type === 'door' && o.properties['requiresFlag'] === 'temple_code_trouve');
     expect(door).toBeDefined();
     expect(door?.properties['requiresFlagUnless']).toBe('rature_jamais');
-    expect(door?.properties['targetRoom']).toBe('ratures_01');
-    expect(door?.properties['showsCompletionToast']).toBe(true);
+    // Depuis 2026-07-29 (zone 4 construite), la porte du temple mène à
+    // crue_01 au lieu de boucler sur elle-même ; le toast de fin de contenu
+    // se déclenche désormais à la sortie de crue_01, plus ici.
+    expect(door?.properties['targetRoom']).toBe('crue_01');
+    expect(door?.properties['showsCompletionToast']).toBeUndefined();
     const chamberObjects = map.objects.filter((o) => o.type === 'transform_word' || o.type === 'console');
     for (const obj of chamberObjects) expect(door?.x ?? 0).toBeGreaterThan(obj.x);
+  });
+});
+
+describe('salle crue_01 — zone 4 « La Crue » (liquide montant, D-crue 2026-07-29)', () => {
+  const map = parseTiledMap(crue01);
+  // Largeur du puits proprement dit (doit rester synchronisée avec SHAFT_W
+  // de tools/gen_room_crue01.mjs / CRUE01_SHAFT_WIDTH de game.ts) : depuis
+  // l'ajout de la salle-trésor (2026-07-29), `map.widthTiles` couvre aussi
+  // l'extension à droite et ne désigne plus la largeur navigable du puits —
+  // les tests sur l'ouverture/largeur du puits doivent utiliser cette
+  // constante, pas `map.widthTiles`.
+  const SHAFT_W = 14;
+
+  it('a un contour fermé', () => {
+    for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) {
+      expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, map.widthTiles - 1, ty)).toBeGreaterThan(0);
+    }
+  });
+
+  it('contient 1 spawn, 2 encriers, 1 cœur, 1 robinet, 4 tourelles, 3 murs BRÈCHE et 1 porte (vers salle_tresor) ; aucun ennemi commun ni PNJ, aucun trésor ICI (déplacé dans salle_tresor, 2026-07-29)', () => {
+    const types = new Set(map.objects.map((o) => o.type));
+    for (const required of ['spawn', 'inkwell', 'potion', 'valve', 'turret', 'door']) {
+      expect(types.has(required), `objet manquant : ${required}`).toBe(true);
+    }
+    expect(map.objects.filter((o) => o.type === 'inkwell')).toHaveLength(2);
+    expect(map.objects.filter((o) => o.type === 'potion')).toHaveLength(1);
+    expect(map.objects.filter((o) => o.type === 'valve')).toHaveLength(1);
+    expect(map.objects.filter((o) => o.type === 'turret')).toHaveLength(4);
+    expect(map.objects.filter((o) => o.type === 'breche_wall')).toHaveLength(3);
+    expect(map.objects.filter((o) => o.type === 'door')).toHaveLength(1);
+    expect(map.objects.find((o) => o.type === 'door')?.properties['targetRoom']).toBe('salle_tresor');
+    expect(types.has('treasure')).toBe(false);
+    expect(types.has('enemy')).toBe(false);
+    expect(types.has('npc')).toBe(false);
+    expect(types.has('word')).toBe(false);
+  });
+
+  it('un sol d\'entrée solide sous le spawn, avec un encrier dessus', () => {
+    const spawn = map.objects.find((o) => o.type === 'spawn');
+    expect(spawn).toBeDefined();
+    const spawnCol = Math.floor((spawn?.x ?? 0) / 16);
+    // Cherche depuis le bas (pas depuis le haut : row0 est aussi solide, le
+    // haut du puits) le sommet du bloc de sol continu sous le spawn.
+    let floorRow = map.heightTiles;
+    for (let ty = map.heightTiles - 1; ty >= 0; ty--) {
+      if (gidAt(map, spawnCol, ty) > 0) floorRow = ty;
+      else break;
+    }
+    expect(floorRow).toBeLessThan(map.heightTiles - 1);
+    // Les pieds du joueur au spawn touchent tout juste le sol (même
+    // convention que les autres salles : spawn.y = surface du sol - hauteur joueur).
+    expect((spawn?.y ?? 0) + 22).toBeLessThanOrEqual(floorRow * 16 + 1);
+
+    const bottomInkwell = map.objects
+      .filter((o) => o.type === 'inkwell')
+      .sort((a, b) => b.y - a.y)[0];
+    expect(bottomInkwell).toBeDefined();
+    expect(bottomInkwell?.y ?? 0).toBeLessThan(floorRow * 16);
+  });
+
+  it('une plateforme de repos à mi-hauteur (non tracée par le joueur), avec le second encrier dessus, entre le sol et le robinet en haut du puits', () => {
+    const valve = map.objects.find((o) => o.type === 'valve');
+    expect(valve).toBeDefined();
+    const inkwells = map.objects.filter((o) => o.type === 'inkwell').sort((a, b) => b.y - a.y);
+    const midInkwell = inkwells[1];
+    expect(midInkwell).toBeDefined();
+    // Le second encrier est strictement entre le sol (encrier du bas) et le
+    // robinet (en haut du puits) : une vraie étape intermédiaire.
+    expect(midInkwell?.y ?? 0).toBeGreaterThan(valve?.y ?? 0);
+    expect(midInkwell?.y ?? 0).toBeLessThan(inkwells[0]?.y ?? 0);
+
+    // La plateforme sous cet encrier est solide sur (quasi) toute la largeur
+    // du puits (pleine largeur : facile à rattraper après un puits ouvert).
+    // Bornée à SHAFT_W (pas map.widthTiles) : au-delà, ce sont les colonnes
+    // de la salle-trésor/bedrock, sans rapport avec cette plateforme.
+    const midRow = Math.floor((midInkwell?.y ?? 0) / 16) + 2;
+    let solidCols = 0;
+    for (let tx = 1; tx < SHAFT_W - 1; tx++) if (gidAt(map, tx, midRow) > 0) solidCols++;
+    expect(solidCols).toBeGreaterThanOrEqual(SHAFT_W - 4);
+  });
+
+  it('entre le sol et la plateforme de repos, et entre la plateforme de repos et le robinet, le puits est vide (aucune géométrie de secours — tout est laissé au tracé du joueur)', () => {
+    const inkwells = map.objects.filter((o) => o.type === 'inkwell').sort((a, b) => b.y - a.y);
+    const bottomRow = Math.floor((inkwells[0]?.y ?? 0) / 16);
+    const midRow = Math.floor((inkwells[1]?.y ?? 0) / 16);
+    const valve = map.objects.find((o) => o.type === 'valve');
+    const topRow = Math.floor((valve?.y ?? 0) / 16);
+
+    // Borné à SHAFT_W (pas map.widthTiles) : le mur du puits (col SHAFT_W-1)
+    // est toujours solide (paroi réelle) mais devenait une colonne
+    // "intérieure" ordinaire une fois la salle-trésor ajoutée derrière lui,
+    // ce qui aurait fait échouer ce test à tort (colonne solide incluse dans
+    // la vérification d'ouverture alors qu'elle n'a jamais fait partie du
+    // puits navigable).
+    const isRowFullyOpen = (row: number) => {
+      for (let tx = 1; tx < SHAFT_W - 1; tx++) if (gidAt(map, tx, row) > 0) return false;
+      return true;
+    };
+    let openBelowMid = 0;
+    for (let ty = midRow + 3; ty < bottomRow; ty++) if (isRowFullyOpen(ty)) openBelowMid++;
+    expect(openBelowMid).toBeGreaterThan(10);
+
+    let openAboveMid = 0;
+    for (let ty = topRow + 3; ty < midRow; ty++) if (isRowFullyOpen(ty)) openAboveMid++;
+    expect(openAboveMid).toBeGreaterThan(10);
+  });
+
+  it('un robinet/fermoir se trouve sur la plateforme du haut, seul point d\'arrivée de la salle (pas de porte, retour de Lucas 2026-07-29)', () => {
+    const valve = map.objects.find((o) => o.type === 'valve');
+    expect(valve).toBeDefined();
+    // Sur la plateforme du haut (row6, y=96) : au-dessus, pas au sol.
+    expect(valve?.y ?? 999).toBeLessThan(120);
+  });
+
+  it('les 2 plateformes de repos ont chacune une bande cassable (BRÈCHE) — bug corrigé le 2026-07-29 : sans ça, personne ne peut jamais atteindre leur surface depuis le puits (capture d\'écran de Lucas, joueur bloqué sous l\'encrier de mi-parcours)', () => {
+    // 3 murs BRÈCHE au total désormais (2026-07-29, salle-trésor) : les 2
+    // bandes des plateformes de repos, plus celle qui ouvre sur la
+    // salle-trésor (testée séparément plus bas) — exclue ici par sa hauteur
+    // (3 rangées, pas 2).
+    const walls = map.objects.filter((o) => o.type === 'breche_wall' && o.height === 2 * 16);
+    expect(walls).toHaveLength(2);
+    for (const wall of walls) {
+      expect(typeof wall.properties['flag']).toBe('string');
+      // Chaque bande fait bien 2 rangées (l'épaisseur des plateformes).
+      expect(wall.height).toBe(2 * 16);
+    }
+    const inkwells = map.objects.filter((o) => o.type === 'inkwell').sort((a, b) => b.y - a.y);
+    const midInkwell = inkwells[1];
+    const valve = map.objects.find((o) => o.type === 'valve');
+
+    // Une bande est au niveau de la plateforme de repos, l'autre au niveau
+    // de la plateforme du haut (même hauteur Y que l'encrier/le robinet
+    // correspondants).
+    const midWall = walls.find((w) => Math.abs(w.y - (midInkwell?.y ?? 0)) <= 40);
+    const topWall = walls.find((w) => Math.abs(w.y - (valve?.y ?? 0)) <= 40);
+    expect(midWall).toBeDefined();
+    expect(topWall).toBeDefined();
+    expect(midWall?.id).not.toBe(topWall?.id);
+
+    // Les deux bandes sont sur des côtés différents (varier), et aucune ne
+    // couvre toute la largeur navigable (le reste de la plateforme doit
+    // rester un sol ordinaire, jamais cassable, pour l'encrier/le robinet).
+    expect(midWall?.width ?? 0).toBeLessThan((SHAFT_W - 2) * 16);
+    expect(topWall?.width ?? 0).toBeLessThan((SHAFT_W - 2) * 16);
+    expect(Math.abs((midWall?.x ?? 0) - (topWall?.x ?? 0))).toBeGreaterThan(64);
+  });
+
+  it('casser une bande BRÈCHE d\'une plateforme de repos ouvre un passage jusqu\'à sa surface, sans affecter l\'autre plateforme', () => {
+    const room = new Room('crue_01', map);
+    const walls = map.objects.filter((o) => o.type === 'breche_wall' && o.height === 2 * 16);
+    for (const wall of walls) room.registerBrecheWall(wall.id, objectTiles(wall));
+    const [wallA, wallB] = walls;
+    if (wallA === undefined || wallB === undefined) throw new Error('2 murs BRÈCHE de plateforme attendus');
+    room.revealFiligrane(wallA.id);
+
+    // La bande cassée n'est plus solide (aucun filigrane dans cette salle :
+    // une tuile révélée redevient simplement vide).
+    const openCol = Math.floor(wallA.x / 16);
+    const openRow = Math.floor(wallA.y / 16);
+    expect(room.isSolid(openCol, openRow)).toBe(false);
+
+    // L'autre plateforme reste entièrement intacte (mur non cassé).
+    const otherCol = Math.floor(wallB.x / 16);
+    const otherRow = Math.floor(wallB.y / 16);
+    expect(room.isSolid(otherCol, otherRow)).toBe(true);
+  });
+
+  it('une alcôve derrière un mur BRÈCHE tout en haut du puits, avec une porte vers salle_tresor (retravaillé le 2026-07-29 : un corridor-jusqu\'en-bas AU SEIN de crue_01 faisait toucher à tort au joueur le niveau de l\'eau montante, qui n\'existe pourtant pas dans ce compartiment séparé — une vraie salle à part règle le problème à la racine)', () => {
+    const TOTAL_W = map.widthTiles; // 20 = SHAFT_W(14) + CHAMBER_W(6)
+
+    // L'alcôve (rows 1-7, cols SHAFT_W..TOTAL_W-2) est vide — juste assez
+    // pour marcher jusqu'à la porte, pas un corridor à descendre.
+    for (let ty = 1; ty <= 7; ty++) {
+      for (let tx = SHAFT_W; tx <= TOTAL_W - 2; tx++) {
+        expect(gidAt(map, tx, ty), `(${String(tx)},${String(ty)}) devrait être vide`).toBe(0);
+      }
+    }
+    // Sol de l'alcôve (row 8) et paroi lointaine (col TOTAL_W-1) solides.
+    for (let tx = SHAFT_W; tx <= TOTAL_W - 1; tx++) {
+      expect(gidAt(map, tx, 8), `sol de l'alcôve en (${String(tx)},8)`).toBeGreaterThan(0);
+    }
+    for (let ty = 1; ty <= 8; ty++) {
+      expect(gidAt(map, TOTAL_W - 1, ty), `paroi lointaine en (${String(TOTAL_W - 1)},${String(ty)})`).toBeGreaterThan(0);
+    }
+
+    // Le mur BRÈCHE qui ouvre sur l'alcôve : sur le mur du puits (col
+    // SHAFT_W-1), près du sommet (à hauteur du robinet), 3 rangées de haut
+    // (pas 2, contrairement aux bandes des plateformes de repos).
+    const doorWall = map.objects.find((o) => o.type === 'breche_wall' && o.height === 3 * 16);
+    expect(doorWall).toBeDefined();
+    expect(Math.floor((doorWall?.x ?? -1) / 16)).toBe(SHAFT_W - 1);
+    expect(typeof doorWall?.properties['flag']).toBe('string');
+    expect(doorWall?.y ?? 999).toBeLessThan(100);
+
+    // La porte vers salle_tresor est dans l'alcôve, pas dans le puits.
+    const door = map.objects.find((o) => o.type === 'door');
+    expect(door).toBeDefined();
+    expect(door?.x ?? 0).toBeGreaterThan(SHAFT_W * 16);
+    expect(door?.properties['targetRoom']).toBe('salle_tresor');
+  });
+
+  it('un objet cœur (restaure des PV, même mécanique que la fiole de chapitre_01) au niveau de l\'encrier de mi-parcours (retour de Lucas 2026-07-29, en remplacement d\'un simple pictogramme décoratif)', () => {
+    const heart = map.objects.find((o) => o.type === 'potion');
+    const midInkwell = map.objects.filter((o) => o.type === 'inkwell').sort((a, b) => b.y - a.y)[1];
+    expect(heart).toBeDefined();
+    expect(typeof heart?.properties['flag']).toBe('string');
+    expect(midInkwell).toBeDefined();
+    expect(Math.abs((heart?.y ?? 0) - (midInkwell?.y ?? 0))).toBeLessThan(40);
+  });
+
+  it('casser le mur BRÈCHE de la salle-trésor ouvre un passage précis, sans affecter le reste du mur du puits', () => {
+    const room = new Room('crue_01', map);
+    const doorWall = map.objects.find((o) => o.type === 'breche_wall' && o.height === 3 * 16);
+    if (doorWall === undefined) throw new Error('mur BRÈCHE de la salle-trésor attendu');
+    room.registerBrecheWall(doorWall.id, objectTiles(doorWall));
+
+    const doorCol = Math.floor(doorWall.x / 16);
+    const doorRow0 = Math.floor(doorWall.y / 16);
+    // Juste au-dessus de la bande cassable, le mur du puits reste solide
+    // (pas de trou géant, seulement la bande enregistrée).
+    expect(room.isSolid(doorCol, doorRow0 - 1)).toBe(true);
+
+    room.revealFiligrane(doorWall.id);
+    for (let ty = doorRow0; ty < doorRow0 + 3; ty++) {
+      expect(room.isSolid(doorCol, ty), `(${String(doorCol)},${String(ty)}) devrait être ouvert`).toBe(false);
+    }
+    // Toujours solide juste au-dessus/en dessous de la bande révélée.
+    expect(room.isSolid(doorCol, doorRow0 - 1)).toBe(true);
+    expect(room.isSolid(doorCol, doorRow0 + 3)).toBe(true);
+  });
+
+  it('4 tourelles fixes, encastrées près des parois, réparties entre le sol et la plateforme de repos puis entre celle-ci et le robinet, alternant de côté', () => {
+    const turrets = map.objects.filter((o) => o.type === 'turret');
+    expect(turrets).toHaveLength(4);
+
+    const inkwells = map.objects.filter((o) => o.type === 'inkwell').sort((a, b) => b.y - a.y);
+    const bottomY = inkwells[0]?.y ?? 0;
+    const midY = inkwells[1]?.y ?? 0;
+    const valveY = map.objects.find((o) => o.type === 'valve')?.y ?? 0;
+
+    // Chaque tourelle est proche d'une paroi DU PUITS (col0 ou col
+    // SHAFT_W-1), pas flottante au milieu. Borné à SHAFT_W (pas
+    // map.widthTiles) : au-delà se trouve la salle-trésor, sans rapport.
+    for (const t of turrets) {
+      const nearLeftWall = t.x < 16;
+      const nearRightWall = t.x > (SHAFT_W - 2) * 16;
+      expect(nearLeftWall || nearRightWall, `tourelle ${t.name} pas près d'un mur`).toBe(true);
+    }
+
+    // 2 dans la moitié basse (entre le sol et la plateforme de repos), 2
+    // dans la moitié haute (entre la plateforme de repos et le robinet).
+    const lower = turrets.filter((t) => t.y > midY && t.y < bottomY);
+    const upper = turrets.filter((t) => t.y > valveY && t.y < midY);
+    expect(lower).toHaveLength(2);
+    expect(upper).toHaveLength(2);
+
+    // Alternance de côté : pas les 4 du même côté.
+    const leftCount = turrets.filter((t) => t.x < 16).length;
+    expect(leftCount).toBeGreaterThan(0);
+    expect(leftCount).toBeLessThan(4);
+  });
+});
+
+describe('salle salle_tresor — bonus de la zone 4, effondrement du plafond (2026-07-29)', () => {
+  const map = parseTiledMap(salleTresor);
+
+  it('a un contour fermé, plate (pas de tracé d\'encre nécessaire pour la traverser)', () => {
+    for (let tx = 0; tx < map.widthTiles; tx++) expect(gidAt(map, tx, 0)).toBeGreaterThan(0);
+    for (let ty = 0; ty < map.heightTiles; ty++) {
+      expect(gidAt(map, 0, ty)).toBeGreaterThan(0);
+      expect(gidAt(map, map.widthTiles - 1, ty)).toBeGreaterThan(0);
+    }
+    const floorRow = map.heightTiles - 1;
+    for (let tx = 1; tx < map.widthTiles - 1; tx++) {
+      expect(gidAt(map, tx, floorRow), `sol en (${String(tx)},${String(floorRow)})`).toBeGreaterThan(0);
+    }
+  });
+
+  it('contient 1 spawn, 1 trésor et 2 portes (entrée + sortie), plusieurs points de chute de débris ; aucun ennemi', () => {
+    const types = new Set(map.objects.map((o) => o.type));
+    for (const required of ['spawn', 'treasure', 'door', 'debris_spawn']) {
+      expect(types.has(required), `objet manquant : ${required}`).toBe(true);
+    }
+    expect(map.objects.filter((o) => o.type === 'door')).toHaveLength(2);
+    expect(map.objects.filter((o) => o.type === 'treasure')).toHaveLength(1);
+    expect(map.objects.filter((o) => o.type === 'debris_spawn').length).toBeGreaterThanOrEqual(3);
+    expect(types.has('enemy')).toBe(false);
+    expect(types.has('turret')).toBe(false);
+  });
+
+  it('le trésor est près de l\'entrée, avec un flag ; les points de chute sont répartis entre lui et la sortie', () => {
+    const treasure = map.objects.find((o) => o.type === 'treasure');
+    const doors = map.objects.filter((o) => o.type === 'door').sort((a, b) => a.x - b.x);
+    const entryDoor = doors[0];
+    const exitDoor = doors[1];
+    expect(treasure).toBeDefined();
+    expect(typeof treasure?.properties['flag']).toBe('string');
+    expect(treasure?.x ?? 0).toBeGreaterThan(entryDoor?.x ?? 0);
+    expect(treasure?.x ?? 0).toBeLessThan((exitDoor?.x ?? 0) - 64); // encore loin de la sortie
+
+    const spawns = map.objects.filter((o) => o.type === 'debris_spawn');
+    for (const s of spawns) {
+      expect(s.x).toBeGreaterThan(treasure?.x ?? 0);
+      expect(s.x).toBeLessThan(exitDoor?.x ?? 0);
+    }
+  });
+
+  it('la porte d\'entrée mène à crue_01 ; la porte de sortie termine le jeu (endsGame) plutôt que de mener quelque part (retour de Lucas 2026-07-29 : « ça sera la fin du jeu »)', () => {
+    const doors = map.objects.filter((o) => o.type === 'door').sort((a, b) => a.x - b.x);
+    expect(doors).toHaveLength(2);
+    const [entryDoor, exitDoor] = doors;
+    expect(entryDoor?.properties['targetRoom']).toBe('crue_01');
+    expect(exitDoor?.properties['targetRoom']).toBeUndefined();
+    expect(exitDoor?.properties['endsGame']).toBe(true);
   });
 });

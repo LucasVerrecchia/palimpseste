@@ -2,6 +2,7 @@
  * Constantes globales de Palimpseste.
  * Règle de la spec (§8) : aucun nombre magique ailleurs dans le code — tout vit ici.
  */
+import type { SfxTone } from '../engine/audio';
 
 /**
  * Taille de la vue en unités monde (16:9). Le renderer l'affiche en vectoriel
@@ -243,6 +244,110 @@ export const CHAPITRE1_ARENA_SCENE = {
   idleSwayHz: 1.8,
 } as const;
 
+/**
+ * Tourelles fixes (zone 4, salle `crue_01`, demande de Lucas 2026-07-29 :
+ * « comme le boss au niveau 2 ») : encastrées dans les murs, ne bougent
+ * jamais, tirent une bulle visée à intervalle régulier. Détruites par HÂTE
+ * (un seul coup, pas de PV) ; pas de dégât de contact. Valeurs proches de
+ * `BOSS` par cohérence visuelle/de rythme, mais un peu plus fréquentes (pas
+ * de phases télégraphiées ici, juste un cooldown).
+ */
+export const TURRET = {
+  width: 12,
+  height: 12,
+  /** Délai avant le tout premier tir une fois le joueur entré dans sa portée. */
+  initialCooldownSeconds: 1.4,
+  /**
+   * Cadence de tir (retour de Lucas 2026-07-29 : « un peu moins souvent »,
+   * remonté depuis 2.2).
+   */
+  cooldownSeconds: 3.4,
+  projectileSpeed: 95,
+  projectileRadius: 4,
+  projectileLifeSeconds: 4,
+  projectileDamage: 8,
+  projectileLeadSeconds: 0.3,
+  /**
+   * Distance (px) sous laquelle une tourelle repère le joueur et se met à
+   * tirer ; au-delà, elle reste inerte (retour de Lucas : les tourelles tout
+   * en haut ne doivent pas tirer dès le début du niveau).
+   */
+  rangeDistance: 130,
+} as const;
+
+/**
+ * Liquide montant (zone 4, salle `crue_01`, décision de Lucas 2026-07-29) :
+ * salle verticale où le joueur grimpe en se traçant ses propres plateformes,
+ * plus vite qu'une surface qui monte en continu. Deux encriers (bas et
+ * mi-parcours, plateformes non tracées par le joueur) redonnent de l'encre
+ * et remettent la surface à un niveau sûr sous le joueur à chaque retour.
+ * Vitesse volontairement modeste pour un premier passage : le tracé à la
+ * souris n'est pas scriptable, donc pas testable automatiquement — à
+ * resserrer après le playtest de Lucas comme le reste des mécaniques d'encre.
+ */
+export const RISING_HAZARD = {
+  /**
+   * Vitesse de montée de la surface (px/s). Remontée de 12 à 16 (2026-07-29,
+   * retour de Lucas : « il faudrait que l'eau monte un petit peu plus vite »),
+   * puis à 20 le jour même (« il faudrait qu'elle monte un peu plus vite
+   * encore »).
+   */
+  riseSpeed: 20,
+  /** Marge (px) laissée sous les pieds du joueur quand la surface se remet à niveau après un retour à l'encrier. */
+  restartOffset: 32,
+  /** Amplitude/fréquence de l'ondulation dessinée à la surface (liquide vivant, pas une ligne figée). */
+  waveAmplitude: 2,
+  waveHz: 0.6,
+  /**
+   * Opacité de la dalle/ligne de surface (retour de Lucas 2026-07-29 : « l'eau
+   * devrait être un peu plus foncée » — remonté depuis 0.4/0.8 fixes en dur).
+   */
+  fillAlpha: 0.58,
+  strokeAlpha: 0.9,
+} as const;
+
+/**
+ * Effondrement du plafond de `salle_tresor` (demande de Lucas 2026-07-29,
+ * en remplacement d'une première version où le trésor se trouvait au fond
+ * d'un corridor du puits de `crue_01` — remplacée par une salle séparée
+ * après un bug : le joueur y touchait à tort le niveau de l'eau montante,
+ * qui n'existe pourtant pas dans cette salle). Une fois le trésor ramassé,
+ * des blocs tombent en continu depuis des points fixes du plafond
+ * (`game/world/falling_debris.ts`) : il faut courir jusqu'à la sortie sans
+ * se faire toucher.
+ */
+export const FALLING_DEBRIS = {
+  width: 16,
+  height: 16,
+  /** Vitesse de chute (px/s). */
+  fallSpeed: 150,
+  /** Délai avant la toute première chute, après le ramassage du trésor. */
+  initialDelaySeconds: 0.6,
+  /** Cadence des chutes suivantes. */
+  spawnIntervalSeconds: 0.85,
+} as const;
+
+/**
+ * Cinématique de fin RATURE (demande de Lucas 2026-07-29 : « une petite
+ * cinématique de notre personnage qui s'en va, qui sort du livre doucement,
+ * et qui disparaît dans un fondu au noir »). C'est le PERSONNAGE PRINCIPAL
+ * (`renderPlayer`, la même forme qu'en jeu) qui marche, pas la silhouette de
+ * l'enfant de `marge_01` (retour de Lucas, un essai précédent réutilisait à
+ * tort ce dernier). POINT FINAL/indécis n'a pas cette cinématique (juste un
+ * texte de clôture, `finalizeEnding`, puis l'écran de fin classique,
+ * `ui/ending_screen.ts`).
+ */
+export const ENDING_SCENE = {
+  /** Durée de la marche avant le fondu (secondes). */
+  walkSeconds: 3,
+  /** Durée du fondu au noir, une fois la marche finie (secondes). */
+  fadeSeconds: 1.6,
+  /** Position de départ/arrivée de la marche (espace vue, 480×270) — sort quasiment du cadre avant le fondu. */
+  walkStartX: 140,
+  walkEndX: 440,
+  groundY: 190,
+} as const;
+
 /** Particules d'encre et ambiance. */
 export const PARTICLES = {
   maxCount: 260,
@@ -269,3 +374,30 @@ export function hexAlpha(hex: string, alpha: number): string {
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${String(r)}, ${String(g)}, ${String(b)}, ${String(alpha)})`;
 }
+
+/**
+ * Musique de fond (demande de Lucas 2026-07-29, fichier fourni dans
+ * `src/fx/music`) : bouclée tant que le jeu est actif (écran-titre compris),
+ * volume réduit (`duckFactor`) quand le menu pause est ouvert. Coupure totale
+ * via le menu Options, réglage persistant (`game/settings.ts`).
+ */
+export const MUSIC = {
+  baseVolume: 0.45,
+  pausedDuckFactor: 0.3,
+} as const;
+
+/**
+ * Bruitages synthétisés (Web Audio, `engine/audio.ts`) — pas de fichier son,
+ * cohérent avec le « zéro asset » du rendu (D9). Un simple glissando de
+ * fréquence par action : saut (montant), double saut AILES (plus aigu, plus
+ * court), dash HÂTE (descendant, plus grave), tir de projectile (mi-boss et
+ * tourelles, aigu et bref). Valeurs posées comme un premier passage
+ * raisonnable, pas calibrées à l'oreille par Lucas — à ajuster après son
+ * retour comme le reste des constantes de gameplay.
+ */
+export const SFX: Record<'jump' | 'doubleJump' | 'dash' | 'shoot', SfxTone> = {
+  jump: { type: 'sine', startFreq: 340, endFreq: 620, durationSeconds: 0.12, gain: 0.18 },
+  doubleJump: { type: 'triangle', startFreq: 480, endFreq: 860, durationSeconds: 0.1, gain: 0.16 },
+  dash: { type: 'sawtooth', startFreq: 260, endFreq: 90, durationSeconds: 0.16, gain: 0.16 },
+  shoot: { type: 'square', startFreq: 720, endFreq: 340, durationSeconds: 0.08, gain: 0.12 },
+} as const;

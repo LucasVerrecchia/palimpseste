@@ -25,6 +25,8 @@ export interface GameEvents extends Record<string, unknown> {
   breche_opened: { objectId: number; flag: string };
   /** Le mi-boss (la Coquille majuscule) est vaincu. */
   boss_defeated: { bossId: string };
+  /** Le joueur atteint la toute fin du jeu (2e porte de `salle_tresor`). */
+  game_ended: { ending: string };
 }
 
 export type GameEventBus = EventBus<GameEvents>;

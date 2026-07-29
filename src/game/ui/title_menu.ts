@@ -1,22 +1,24 @@
 /**
- * Écran-titre : nouvelle partie / charger une partie (demande de Lucas,
- * 2026-07-28 — jusqu'ici le jeu démarrait directement en jeu, sans menu).
- * Pur affichage — la navigation et les actions vivent dans game.ts.
+ * Écran-titre : nouvelle partie / charger une partie / options (demande de
+ * Lucas, 2026-07-28 — jusqu'ici le jeu démarrait directement en jeu, sans
+ * menu). Pur affichage — la navigation et les actions vivent dans game.ts.
  *
  * « Nouvelle partie » démarre directement, SANS choisir d'emplacement : le
  * choix ne se fait qu'au moment de sauvegarder (menu pause) ou de charger
  * (ici) — retour de Lucas, 2026-07-28. Seule « Charger une partie » affiche
  * donc une liste d'emplacements (`ui/slot_list.ts`, partagée avec le menu
- * pause).
+ * pause). « Options » (ajouté 2026-07-29, musique) affiche une vue partagée
+ * avec le menu pause (`ui/options_menu.ts`), pas dessinée ici.
  */
 import { hexAlpha, INTERNAL_HEIGHT, INTERNAL_WIDTH, PALETTE, RENDERING } from '../config';
 
-export type TitleView = 'main' | 'load';
+export type TitleView = 'main' | 'load' | 'options';
 
-export const TITLE_MENU_OPTIONS = ['Nouvelle partie', 'Charger une partie'] as const;
+export const TITLE_MENU_OPTIONS = ['Nouvelle partie', 'Charger une partie', 'Options'] as const;
 
 const PANEL_WIDTH = 260;
-const MAIN_HEIGHT = 108;
+// +22 (2026-07-29) : 3e option (Options) ajoutée, la hauteur fixe doit suivre.
+const MAIN_HEIGHT = 130;
 const MAIN_ROW_Y0 = 56;
 const MAIN_ROW_H = 22;
 

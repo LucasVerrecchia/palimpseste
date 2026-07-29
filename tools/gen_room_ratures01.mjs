@@ -6,12 +6,19 @@
  * (narrative/dialogue.ts) : La Rature qui regrette
  * (`data/dialogues/pnj_ratures.json`, à l'entrée de la chambre des mots,
  * explique le mécanisme) + 2 PNJ-indice (retour de Lucas 2026-07-29,
- * retravaillés une 2e fois le même jour), disposés à des endroits différents
- * plus tôt dans le niveau — y compris en hauteur, sur un petit parcours de
- * plateformes après le gouffre — qui donnent chacun un indice sur une
- * moitié du CODE du temple (le sujet « personnage », l'attribut « bleu »)
- * sur POINT FINAL/indécis, sans le nommer, remplace l'ancien essai-erreur
- * libre des 12 combinaisons.
+ * retravaillés une 3e fois le 2026-07-29 suivant), disposés à des endroits
+ * différents plus tôt dans le niveau — sur des plateformes en hauteur
+ * INACCESSIBLES sans se tracer ses propres plateformes d'encre (retour de
+ * Lucas : « il faudrait que le personnage soit obligé de construire des
+ * plateformes pour atteindre certains pnj » — l'ancien petit escalier de 2
+ * marches, à portée d'un simple saut tenu, ne l'exigeait pas vraiment, il
+ * est retiré). Chacun donne un indice sur une moitié du CODE du temple
+ * (le sujet « ciel », l'attribut « rouge » — remplace « personnage »/« bleu »,
+ * retour de Lucas le même jour) sur POINT FINAL/indécis, sans le nommer,
+ * remplace l'ancien essai-erreur libre des 12 combinaisons. Sur RATURE, ces
+ * 2 PNJ n'apparaissent plus du tout (`hiddenIfFlag`, nouvelle propriété Tiled
+ * générique) : « un seul pnj dans cette version » (Lucas) — leurs indices ne
+ * servent à rien une fois la porte déjà ouverte, autant ne pas les proposer.
  *
  * Traversée : mot-pouvoir AILES juste avant un petit gouffre (x=18-21,
  * portée du dash HÂTE insuffisante). Pas d'ennemi dans cette salle (retour
@@ -66,18 +73,16 @@ solid(1, 14, W - 2, 16); // sol continu
 // (x=10), ce qui le rend franchissable.
 clear(18, 14, 21, 16);
 
-// Petit parcours de plateformes après le gouffre (retour de Lucas
-// 2026-07-29 : les PNJ-indice doivent être à des endroits différents, y
-// compris en hauteur, pas alignés au sol). Escalier à 2 marches (le premier
-// PNJ-indice attend en haut, row9) : chaque marche reste à portée d'un seul
-// saut tenu depuis la précédente (32 puis 48 px, sous le maximum d'un saut
-// simple ~57 px — pas besoin d'AILES pour grimper ici, contrairement au
-// gouffre juste avant).
-solid(24, 12, 26, 13);
-solid(29, 9, 32, 11);
-// Plateforme isolée, plus loin, pour le second PNJ-indice (row11, un seul
-// saut direct depuis le sol — hauteur différente du premier pour varier).
-solid(37, 11, 40, 13);
+// Plateformes des 2 PNJ-indice, après le gouffre (retravaillé le 2026-07-29,
+// même jour : plus d'escalier intermédiaire — retour de Lucas, atteindre ces
+// PNJ doit exiger de se tracer ses propres plateformes d'encre, pas un simple
+// saut/saut tenu). Hauteur au-dessus du sol (row14*16=224) : row5→144px et
+// row3→176px, toutes deux nettement au-delà du maximum vertical atteignable
+// sans encre (saut ~57px + AILES ~47px ≈ 105px) — impossible d'y monter sans
+// peindre au moins un palier intermédiaire. Hauteurs différentes entre les
+// deux pour varier (retour initial de Lucas, 2026-07-29 matin).
+solid(29, 5, 32, 7); // PNJ-indice « ciel »
+solid(37, 3, 40, 5); // PNJ-indice « rouge »
 
 // --- Objets (calque "objects") --------------------------------------------
 let nextId = 1;
@@ -112,24 +117,33 @@ const objects = [
   // ennemis communs (Coquille, Rature) qui patrouillaient ici après le
   // gouffre sont retirés.
 
-  // Deux PNJ-indice (retour de Lucas 2026-07-29, retravaillé une 2e fois le
-  // même jour) : sur POINT FINAL/indécis, le libre recoloriage ne suffit
-  // plus à ouvrir la porte du temple, il faut le CODE exact — obtenu en
-  // interrogeant plusieurs PNJ à différents endroits du niveau, y compris en
-  // hauteur (sur les 2 plateformes ci-dessus), plutôt qu'en essayant les 12
-  // combinaisons au hasard. Le code lui-même est passé de « soleil devient
-  // jaune » (trop évident, un fait ordinaire) à « personnage devient bleu »
-  // (data/chapters/ratures_01.json, isTempleCode). Chacun donne un indice
-  // sur une moitié du code (sujet/attribut) sans le nommer explicitement ;
-  // sur RATURE, la porte est déjà ouverte, ils le disent sans détour
-  // (`startVariants`, comme La Rature qui regrette). [proposition narration]
+  // Deux PNJ-indice, sur les plateformes en hauteur ci-dessus (retour de
+  // Lucas 2026-07-29, retravaillé une 3e fois le même jour) : sur POINT
+  // FINAL/indécis, le libre recoloriage ne suffit plus à ouvrir la porte du
+  // temple, il faut le CODE exact — obtenu en interrogeant plusieurs PNJ,
+  // chacun perché sur une plateforme atteignable seulement en s'y traçant de
+  // l'encre, plutôt qu'en essayant les 12 combinaisons au hasard. Le code
+  // lui-même est passé de « soleil devient jaune » → « personnage devient
+  // bleu » → « ciel devient rouge » (data/chapters/ratures_01.json,
+  // isTempleCode, dernier changement du 2026-07-29 : Lucas juge « soleil
+  // jaune » et par extension un fait de la nature trop devinable). Chacun
+  // donne un indice sur une moitié du code (sujet/attribut) sans le nommer
+  // explicitement ; sur RATURE, la porte est déjà ouverte ET ces 2 PNJ ne
+  // sont même plus présents (`hiddenIfFlag`, un seul PNJ sur cette voie,
+  // demande explicite de Lucas). [proposition narration]
   {
-    id: id(), name: 'pnj_indice_personnage', type: 'npc', x: 30 * TILE, y: 124, width: 12, height: 20,
-    properties: [prop('dialogue', 'string', 'pnj_ratures_indice_personnage')],
+    id: id(), name: 'pnj_indice_ciel', type: 'npc', x: 30 * TILE, y: 60, width: 12, height: 20,
+    properties: [
+      prop('dialogue', 'string', 'pnj_ratures_indice_ciel'),
+      prop('hiddenIfFlag', 'string', 'rature_jamais'),
+    ],
   },
   {
-    id: id(), name: 'pnj_indice_bleu', type: 'npc', x: 38 * TILE, y: 156, width: 12, height: 20,
-    properties: [prop('dialogue', 'string', 'pnj_ratures_indice_bleu')],
+    id: id(), name: 'pnj_indice_rouge', type: 'npc', x: 38 * TILE, y: 28, width: 12, height: 20,
+    properties: [
+      prop('dialogue', 'string', 'pnj_ratures_indice_rouge'),
+      prop('hiddenIfFlag', 'string', 'rature_jamais'),
+    ],
   },
 
   // La Rature qui regrette : à l'entrée de la chambre des mots — son
@@ -209,24 +223,24 @@ const objects = [
 
   // Porte du temple, seule porte de progression de cette zone : sur RATURE
   // déjà ouverte (requiresFlagUnless) ; sur POINT FINAL/indécis il faut avoir
-  // composé la bonne phrase (requiresFlag). Boucle sur une alcôve de la même
-  // salle : pas de zone 4 à construire cette passe, juste un point d'accroche
-  // propre. Porte le toast de fin de contenu actuel.
-  // requiresFlag pointe vers temple_code_trouve (flag permanent posé en plus
-  // de monde_soleil_jaune, game.ts) et non monde_soleil_jaune lui-même
-  // depuis le 2026-07-28 : ce dernier peut désormais être effacé si le
-  // joueur recolorie le soleil autrement après coup, ce qui reverrouillerait
-  // la porte à tort si elle en dépendait directement.
+  // composé la bonne phrase (requiresFlag). Mène désormais à la zone 4
+  // (crue_01, le puits au liquide montant) — ne boucle plus sur elle-même
+  // (2026-07-29, la zone 4 existe). requiresFlag pointe vers
+  // temple_code_trouve (flag permanent posé en plus de monde_soleil_jaune,
+  // game.ts) et non monde_soleil_jaune lui-même depuis le 2026-07-28 : ce
+  // dernier peut désormais être effacé si le joueur recolorie le soleil
+  // autrement après coup, ce qui reverrouillerait la porte à tort si elle en
+  // dépendait directement. Le toast de fin de contenu actuel se déclenche
+  // désormais à la sortie de crue_01 (plus ici, la zone 4 existe).
   {
     id: id(), name: 'porte_temple', type: 'door', x: 79 * TILE, y: 192, width: 16, height: 32,
     properties: [
-      prop('targetRoom', 'string', 'ratures_01'),
-      prop('targetX', 'int', 76 * TILE),
-      prop('targetY', 'int', 202),
+      prop('targetRoom', 'string', 'crue_01'),
+      prop('targetX', 'int', 3 * TILE),
+      prop('targetY', 'int', 730),
       prop('requiresFlag', 'string', 'temple_code_trouve'),
       prop('requiresFlagUnless', 'string', 'rature_jamais'),
       prop('lockedMessage', 'string', 'La porte du temple ne s\'ouvre pas : il manque encore la bonne phrase.'), // [proposition]
-      prop('showsCompletionToast', 'boolean', true),
     ],
   },
 ];

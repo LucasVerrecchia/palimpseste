@@ -10,7 +10,7 @@
       "flag": "rature_jamais",
       "setBy": "marge_01 : raturer le mot-loi « enfant » (mot_enfant) — refondu le 2026-07-28, remplace l'ancien mot « jamais »",
       "endingLeaningEffect": -1,
-      "notes": "Verrouille mutuellement nom_ecrit (isDeviationLocked, exclusiveWith) : une fois ce flag posé, dessiner le point final échoue avec un toast dédié. Détermine aussi le reskin du mi-boss (La Marge, resolveBossFlavor), la variante d'intro de La Rature qui regrette (pnj_ratures, startVariants) et le repère de voie du menu pause (resolveLeaning → 'rature'). Le nom du flag n'a pas changé bien que le mot/geste qui le pose ait changé — lu par trop d'autres systèmes pour justifier un renommage."
+      "notes": "Verrouille mutuellement nom_ecrit (isDeviationLocked, exclusiveWith) : une fois ce flag posé, dessiner le point final échoue avec un toast dédié. Détermine aussi le reskin du mi-boss (La Marge, resolveBossFlavor), la variante d'intro de La Rature qui regrette (pnj_ratures, startVariants), le repère de voie du menu pause (resolveLeaning → 'rature'), et depuis le 2026-07-29 la peau du liquide montant de crue_01 (hazard_flavor.ts) ainsi que la visibilité des 2 PNJ-indice de ratures_01 (hiddenIfFlag, game.ts isNpcHidden — masqués sur ce chemin, un seul PNJ y reste). Le nom du flag n'a pas changé bien que le mot/geste qui le pose ait changé — lu par trop d'autres systèmes pour justifier un renommage."
     },
     {
       "flag": "nom_ecrit",
@@ -34,19 +34,19 @@
       "flag": "monde_<sujet>_<attribut> (ex. monde_soleil_jaune, monde_page_bleu, monde_personnage_rouge...)",
       "setBy": "ratures_01 : composer « Le/La <sujet> devint <attribut> » à la chambre des mots (les 2 slots corrects déposés à la console de validation, resolveTransformAttempt, game.ts) ; 12 combinaisons prévues (4 sujets × 3 attributs)",
       "endingLeaningEffect": 0,
-      "notes": "Un seul flag actif à la fois par sujet (2026-07-28, bug corrigé : resolveTransformAttempt efface désormais les flags des 2 autres attributs du même sujet à chaque nouvelle validation) — recolorier un sujet est toujours possible, y compris après une réussite précédente. Sur le chemin RATURE (rature_jamais), le flag actif rend l'élément visuel visé réellement de cette couleur (resolveWorldColor, narrative/world_transform.ts) ; sur POINT FINAL/indécis, poser un de ces flags n'a aucun effet visuel (juste la preuve d'avoir trouvé la phrase). Ne déverrouille pas directement porte_temple : voir temple_code_trouve."
+      "notes": "Un seul flag actif à la fois par sujet (2026-07-28, bug corrigé : resolveTransformAttempt efface désormais les flags des 2 autres attributs du même sujet à chaque nouvelle validation) — recolorier un sujet est toujours possible, y compris après une réussite précédente. Sur le chemin RATURE (rature_jamais), le flag actif rend l'élément visuel visé réellement de cette couleur (resolveWorldColor, narrative/world_transform.ts) ; sur POINT FINAL/indécis, poser un de ces flags n'a aucun effet visuel (juste la preuve d'avoir trouvé la phrase). Ne déverrouille pas directement porte_temple : voir temple_code_trouve. Tous remis à false par `restartLevel()` sur ratures_01 (2026-07-29)."
     },
     {
       "flag": "temple_code_trouve",
-      "setBy": "ratures_01 : composer la combinaison marquée isTempleCode à la chambre des mots (data/chapters/ratures_01.json), au moins une fois — « Le Personnage devint bleu » depuis le 2026-07-29 (remplace « Le Soleil devint jaune », jugé trop évident par Lucas), posé en plus du flag monde_personnage_bleu, jamais effacé ensuite",
+      "setBy": "ratures_01 : composer la combinaison marquée isTempleCode à la chambre des mots (data/chapters/ratures_01.json), au moins une fois — « Le Ciel devint rouge » depuis le 2026-07-29 (2e changement de code le même jour : « Le Soleil devint jaune » puis « Le Personnage devint bleu » jugés tour à tour trop devinables par Lucas), posé en plus du flag monde_ciel_rouge, jamais effacé ensuite",
       "endingLeaningEffect": 0,
-      "notes": "Ajouté 2026-07-28, séparé du flag monde_<sujet>_<attribut> de la combinaison courante : déverrouille porte_temple SAUF sur le chemin RATURE (rature_jamais), où elle est déjà ouverte sans lui (requiresFlagUnless, isDoorLocked). Rester permanent (jamais effacé) évite que recolorier le sujet avec un autre attribut après coup reverrouille une porte déjà ouverte. La combinaison exacte est une donnée (isTempleCode, narrative/world_transform.ts) : changer le code ne touche plus à game.ts."
+      "notes": "Ajouté 2026-07-28, séparé du flag monde_<sujet>_<attribut> de la combinaison courante : déverrouille porte_temple SAUF sur le chemin RATURE (rature_jamais), où elle est déjà ouverte sans lui (requiresFlagUnless, isDoorLocked). Rester permanent (jamais effacé) évite que recolorier le sujet avec un autre attribut après coup reverrouille une porte déjà ouverte. La combinaison exacte est une donnée (isTempleCode, narrative/world_transform.ts) : changer le code ne touche plus à game.ts. Remis à false par `restartLevel()` sur ratures_01 (2026-07-29) — sinon la porte resterait déverrouillée après un restart alors même que les flags monde_<sujet>_<attribut> auraient été réinitialisés."
     },
     {
       "flag": "breche_chapitre1_ouverte / breche_gauntlet1_ouverte / breche_gauntlet2_ouverte",
       "setBy": "chapitre_01 : casser chacun des 3 murs BRÈCHE de la salle",
       "endingLeaningEffect": 0,
-      "notes": "Purement mécaniques (ouvrent un passage) ; aucun poids narratif."
+      "notes": "Purement mécaniques (ouvrent un passage) ; aucun poids narratif. Comme tout flag porté par la propriété `flag` d'un objet de salle (murs BRÈCHE, fioles/cœurs, fragments, trésors, mots-loi), remis à false automatiquement par `restartLevel()` (2026-07-29, boucle générique sur les objets de la salle courante) — pas besoin d'énumérer chaque flag de cette catégorie ici."
     },
     {
       "flag": "potion_chapitre1_pv",
@@ -58,19 +58,37 @@
       "flag": "boss_coquille_majuscule_vaincu",
       "setBy": "chapitre_01 : défaite du mi-boss",
       "endingLeaningEffect": 0,
-      "notes": "Déverrouille la porte vers ratures_01. Le reskin du boss (déjà résolu via rature_jamais avant le combat) ne change pas rétroactivement en fonction de ce flag."
+      "notes": "Déverrouille la porte vers ratures_01. Le reskin du boss (déjà résolu via rature_jamais avant le combat) ne change pas rétroactivement en fonction de ce flag. Remis à false par `restartLevel()` sur chapitre_01 (bug corrigé 2026-07-29 : un restart recréait bien un boss vivant mais laissait la porte déjà déverrouillée)."
     },
     {
       "flag": "chapitre1_fini",
       "setBy": "marge_01 : franchir la porte de fin (endsChapter)",
       "endingLeaningEffect": 0,
-      "notes": "Marque la fin du chapitre ; le toast affiché ('rature' vs 'point') est dérivé de rature_jamais déjà posé, pas de ce flag."
+      "notes": "Marque la fin du chapitre ; le toast affiché ('rature' vs 'point') est dérivé de rature_jamais déjà posé, pas de ce flag. Remis à false par `restartLevel()` sur marge_01 (2026-07-29)."
     },
     {
-      "flag": "ratures01_fini",
-      "setBy": "ratures_01 : franchir la porte du temple (porte_temple) une fois déverrouillée",
+      "flag": "content_fin_actuelle",
+      "setBy": "crue_01 : actionner le robinet/fermoir en haut du puits",
       "endingLeaningEffect": 0,
-      "notes": "Marque la fin du contenu actuellement construit (zones 4-6 à venir)."
+      "notes": "Renommé depuis ratures01_fini (2026-07-29, la zone 4 crue_01 existe désormais) : marque la fin du contenu actuellement construit (zones 5-6 à venir). Déclenché depuis la porte_suite de crue_01 jusqu'au 2026-07-29 (retour de Lucas) puis déplacé vers le robinet (CRUE01_VALVE_FLAG) une fois la porte de sortie retirée (« pas de porte, on continue jusqu'au cœur du temple »). Marqueur méta (pas de la fiction) : volontairement épargné par `restartLevel()`, contrairement à la plupart des autres flags de cette liste."
+    },
+    {
+      "flag": "crue01_eau_stoppee",
+      "setBy": "crue_01 : actionner le robinet/fermoir en haut du puits (CRUE01_VALVE_FLAG, game.ts)",
+      "endingLeaningEffect": 0,
+      "notes": "Gèle `hazardY` pour de bon (`updateHazard`) — purement mécanique, aucun poids narratif au-delà du texte d'arrivée (stopMessage, hazard_flavor.ts). Remis à false par `restartLevel()` sur crue_01 (bug corrigé 2026-07-29 : restait vrai après « Recommencer le niveau », le robinet restait fermé)."
+    },
+    {
+      "flag": "salle_tresor_trouve",
+      "setBy": "salle_tresor : ramasser le trésor près de l'entrée",
+      "endingLeaningEffect": 0,
+      "notes": "Purement mécanique (persistance du ramassage, `collectedObjects`). Déclenche aussi `collapseActive` (état de session, non persisté) qui fait tomber les blocs du plafond jusqu'à la sortie — voir `game/world/falling_debris.ts`."
+    },
+    {
+      "flag": "jeu_termine",
+      "setBy": "salle_tresor : franchir la 2e porte (endsGame), une fois le trésor échappé de l'effondrement",
+      "endingLeaningEffect": 0,
+      "notes": "Ajouté 2026-07-29 : cette porte menait auparavant en boucle vers crue_01 (retour de Lucas, « elle devrait mener à l'extérieur du temple, ça sera la fin du jeu »). Le texte de fin ('rature' vs 'point') est dérivé de rature_jamais déjà posé, pas de ce flag, même principe que chapitre1_fini. Bascule le jeu en mode 'ending' (game.ts) après la narration de clôture. Remis à false par `restartLevel()` sur salle_tresor (2026-07-29)."
     }
   ]
 }
