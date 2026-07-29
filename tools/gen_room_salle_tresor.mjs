@@ -82,7 +82,7 @@ const objects = [
   // (game.ts, gated sur room.id === 'salle_tresor').
   {
     id: id(), name: 'tresor_salle_tresor', type: 'treasure',
-    x: 6 * TILE, y: FLOOR_SURFACE_Y - 20, width: 16, height: 16,
+    x: 12 * TILE, y: FLOOR_SURFACE_Y - 20, width: 16, height: 16,
     properties: [prop('flag', 'string', 'salle_tresor_trouve')],
   },
 

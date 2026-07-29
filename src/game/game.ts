@@ -2677,10 +2677,16 @@ export class Game {
    * ce qui laissait un bord non peint visible pendant la marche (retour de
    * Lucas 2026-07-29, « il faut élargir sur toute la surface le fond de page
    * qu'il y a déjà ») : redessiné ici en l'étirant explicitement sur toute la
-   * vue plutôt que de recréer une texture dédiée à la cinématique.
+   * vue plutôt que de recréer une texture dédiée à la cinématique. Décor
+   * (« remets le même fond qu'au niveau 1 : soleil, montagne, arbres »,
+   * même jour) : réutilise directement `renderBackdrop` avec un `roomId`
+   * arbitraire non nocturne (`'chapitre_01'`, `NIGHT_ROOMS` ne contient que
+   * `marge_01`) et une caméra fixe à (0,0) — un décor de fond n'a pas besoin
+   * d'être lié à la vraie salle ni à une caméra mobile pour ce plan fixe.
    */
   private renderEndingWalkAway(ctx: CanvasRenderingContext2D): void {
     ctx.drawImage(this.paper, 0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT);
+    renderBackdrop(ctx, 'chapitre_01', 0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT, this.time);
     this.renderPlayer(ctx);
 
     if (this.endingSceneState === 'fadingOut') {

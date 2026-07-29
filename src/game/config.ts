@@ -290,9 +290,9 @@ export const RISING_HAZARD = {
    * Vitesse de montée de la surface (px/s). Remontée de 12 à 16 (2026-07-29,
    * retour de Lucas : « il faudrait que l'eau monte un petit peu plus vite »),
    * puis à 20 le jour même (« il faudrait qu'elle monte un peu plus vite
-   * encore »).
+   * encore »), puis à 30 (ajustement direct de Lucas dans ce fichier).
    */
-  riseSpeed: 20,
+  riseSpeed: 30,
   /** Marge (px) laissée sous les pieds du joueur quand la surface se remet à niveau après un retour à l'encrier. */
   restartOffset: 32,
   /** Amplitude/fréquence de l'ondulation dessinée à la surface (liquide vivant, pas une ligne figée). */

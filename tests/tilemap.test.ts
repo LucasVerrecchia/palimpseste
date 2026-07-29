@@ -907,7 +907,11 @@ describe('salle salle_tresor — bonus de la zone 4, effondrement du plafond (20
     expect(types.has('turret')).toBe(false);
   });
 
-  it('le trésor est près de l\'entrée, avec un flag ; les points de chute sont répartis entre lui et la sortie', () => {
+  it('le trésor est entre l\'entrée et la sortie, avec un flag ; les points de chute sont dans la même zone (course vers la sortie)', () => {
+    // Position exacte du trésor ajustée manuellement par Lucas dans le
+    // générateur (2026-07-29) : ne pas figer sa position relative aux
+    // points de chute (l'ancienne version exigeait « après le trésor »),
+    // seulement qu'il reste dans la zone jouable entre les deux portes.
     const treasure = map.objects.find((o) => o.type === 'treasure');
     const doors = map.objects.filter((o) => o.type === 'door').sort((a, b) => a.x - b.x);
     const entryDoor = doors[0];
@@ -915,11 +919,11 @@ describe('salle salle_tresor — bonus de la zone 4, effondrement du plafond (20
     expect(treasure).toBeDefined();
     expect(typeof treasure?.properties['flag']).toBe('string');
     expect(treasure?.x ?? 0).toBeGreaterThan(entryDoor?.x ?? 0);
-    expect(treasure?.x ?? 0).toBeLessThan((exitDoor?.x ?? 0) - 64); // encore loin de la sortie
+    expect(treasure?.x ?? 0).toBeLessThan(exitDoor?.x ?? 0);
 
     const spawns = map.objects.filter((o) => o.type === 'debris_spawn');
     for (const s of spawns) {
-      expect(s.x).toBeGreaterThan(treasure?.x ?? 0);
+      expect(s.x).toBeGreaterThan(entryDoor?.x ?? 0);
       expect(s.x).toBeLessThan(exitDoor?.x ?? 0);
     }
   });
